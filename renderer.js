@@ -141,6 +141,9 @@ function probeDuration(item) {
     const el = document.createElement(item.type === 'audio' ? 'audio' : 'video');
     el.src = item.fileUri;
     el.preload = 'metadata';
+    el.style.cssText = 'position:fixed; top:-9999px; left:-9999px; width:1px; height:1px; opacity:0; pointer-events:none;';
+    document.body.appendChild(el);
+    el.load();
     const timer = setTimeout(() => { el.remove(); resolve(); }, 3000);
     el.onloadedmetadata = () => {
       clearTimeout(timer);
@@ -162,6 +165,9 @@ function generateVideoThumbnail(item) {
       const audio = document.createElement('audio');
       audio.src = item.fileUri;
       audio.preload = 'metadata';
+      audio.style.cssText = 'position:fixed; top:-9999px; left:-9999px; width:1px; height:1px; opacity:0; pointer-events:none;';
+      document.body.appendChild(audio);
+      audio.load();
       const audioTimeout = setTimeout(() => {
         audio.remove();
         resolve(null);
@@ -191,6 +197,9 @@ function generateVideoThumbnail(item) {
     video.preload = 'auto';
     video.muted = true;
     video.playsInline = true;
+    video.style.cssText = 'position:fixed; top:-9999px; left:-9999px; width:1px; height:1px; opacity:0; pointer-events:none;';
+    document.body.appendChild(video);
+    video.load();
 
     let finished = false;
     const cleanup = () => {
@@ -210,23 +219,24 @@ function generateVideoThumbnail(item) {
     const timeout = setTimeout(() => {
       cleanup();
       resolve(null);
-    }, 4500);
+    }, 5000);
 
     const captureFrame = () => {
+      let thumb = null;
       try {
         const canvas = document.createElement('canvas');
         canvas.width = 360;
         canvas.height = 202;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const thumb = canvas.toDataURL('image/jpeg', 0.75);
-        const duration = video.duration || item.durationSec;
-        cleanup();
-        resolve({ thumb, duration });
+        thumb = canvas.toDataURL('image/jpeg', 0.75);
       } catch (e) {
-        cleanup();
-        resolve(null);
+        console.warn('Thumbnail canvas export error:', e);
+        thumb = null;
       }
+      const duration = video.duration || item.durationSec;
+      cleanup();
+      resolve({ thumb, duration });
     };
 
     video.onloadedmetadata = () => {
