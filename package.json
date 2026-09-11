@@ -1,0 +1,21 @@
+{
+  "name": "localvancedyt",
+  "version": "1.0.0",
+  "description": "Offline YouTube-Style Media Player with Advanced Filtering & Large Library Support",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "keywords": [
+    "youtube",
+    "offline-player",
+    "electron",
+    "media-player",
+    "local-video"
+  ],
+  "author": "Gulam Mustafa",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.4.11"
+  }
+}

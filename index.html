@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LocalVancedYT</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header class="app-header">
+    <div class="logo-area" id="btnLogo">
+      <div class="logo-icon">▶</div>
+      <div class="logo-text">LocalVanced<span style="color:var(--accent);">YT</span></div>
+      <span class="logo-badge">OFFLINE</span>
+    </div>
+
+    <div class="search-container">
+      <input type="text" id="searchInput" class="search-input" placeholder="Search your local media library...">
+      <span class="search-icon">🔍</span>
+    </div>
+
+    <div class="header-actions">
+      <input type="file" id="browserFolderInput" webkitdirectory directory multiple style="display:none;">
+      <input type="file" id="browserFilesInput" multiple accept="video/*,audio/*" style="display:none;">
+      <input type="file" id="restoreFileInput" accept=".json" style="display:none;">
+      <button class="btn btn-accent" id="btnAddFolder">📁 Add Folder</button>
+      <button class="btn" id="btnAddFiles" title="Pick individual video/audio files">🎞️ Add Files</button>
+      <button class="btn" id="btnExportBackup" title="Export whole library & playlists backup">💾 Backup</button>
+      <button class="btn" id="btnImportRestore" title="Restore library from JSON backup">📥 Restore</button>
+      <button class="btn" id="btnClearLibrary" title="Reset library index">🗑️ Reset</button>
+      <button class="btn" id="btnToggleTheme">🌓 Theme</button>
+    </div>
+  </header>
+
+  <!-- App Body -->
+  <div class="app-body">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="nav-item active" data-view="home">🏠 Home</div>
+      <div class="nav-item" data-view="videos">🎬 Videos</div>
+      <div class="nav-item" data-view="audio">🎵 Audio & Music</div>
+      <div class="nav-item" data-view="history">🕒 History</div>
+      <div class="nav-item" data-view="favorites">⭐ Favorites</div>
+      <div class="nav-item" data-view="playlists">📋 Playlists</div>
+      <div class="nav-item" data-view="folders">📁 Folders / Channels</div>
+      <div class="nav-item" data-view="settings">⚙️ Settings</div>
+
+      <div class="sidebar-heading">Your Channels</div>
+      <div id="sidebarChannelsList" style="display:flex; flex-direction:column; gap:2px;"></div>
+    </aside>
+
+    <!-- Main View / Feed -->
+    <main class="main-view" id="mainView">
+      <!-- Filter Chips & Sorting Bar -->
+      <div class="filter-bar">
+        <div class="chips-scroll" id="filterChips">
+          <div class="chip active" data-filter="all">All</div>
+          <div class="chip" data-filter="video">Videos</div>
+          <div class="chip" data-filter="audio">Audio</div>
+          <div class="chip" data-filter="resume">Continue Watching</div>
+          <div class="chip" data-filter="unwatched">Unwatched</div>
+          <div class="chip" data-filter="short">&lt; 5 mins</div>
+          <div class="chip" data-filter="medium">5 - 20 mins</div>
+          <div class="chip" data-filter="long">&gt; 20 mins</div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:8px;">
+          <select id="sortSelect" class="sort-select">
+            <option value="date-desc">Newest Added</option>
+            <option value="date-asc">Oldest Added</option>
+            <option value="title-asc">Title (A - Z)</option>
+            <option value="title-desc">Title (Z - A)</option>
+            <option value="duration-desc">Duration (Longest)</option>
+            <option value="duration-asc">Duration (Shortest)</option>
+            <option value="size-desc">File Size (Largest)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Main Dynamic Content Container -->
+      <div class="content-padding" id="feedContent">
+        <!-- Shelves & Grid populated by renderer.js -->
+      </div>
+    </main>
+
+    <!-- Watch View Overlay -->
+    <div class="watch-overlay" id="watchOverlay">
+      <div style="padding:16px 24px 0;">
+        <button class="btn" id="btnCloseWatch">← Back to Browse</button>
+      </div>
+
+      <div class="watch-layout">
+        <!-- Video & Controls -->
+        <div class="watch-player-area">
+          <div class="video-container">
+            <video id="mainVideoPlayer" class="main-video-player" preload="metadata"></video>
+            
+            <!-- Custom YouTube Playback Control Bar -->
+            <div class="custom-controls" id="customControls">
+              <!-- Scrub Progress Bar -->
+              <div class="progress-bar-wrap" id="progressWrap">
+                <div class="progress-buffered" id="progressBuffered"></div>
+                <div class="progress-played" id="progressPlayed"></div>
+                <div class="progress-scrubber" id="progressScrubber"></div>
+                <div class="scrub-time-tooltip" id="scrubTooltip">0:00</div>
+              </div>
+
+              <div class="controls-row">
+                <div class="controls-left">
+                  <button class="ctrl-btn" id="ctrlPlayPause" title="Play/Pause (Space/K)">▶</button>
+                  <button class="ctrl-btn" id="ctrlPrev" title="Previous video in folder">⏮</button>
+                  <button class="ctrl-btn" id="ctrlNext" title="Next video in folder">⏭</button>
+                  <button class="ctrl-btn" id="ctrlRewind" title="Rewind 10s (J/←)">↺10</button>
+                  <button class="ctrl-btn" id="ctrlForward" title="Forward 10s (L/→)">10↻</button>
+                  
+                  <!-- Volume / Mute -->
+                  <div class="vol-control">
+                    <button class="ctrl-btn" id="ctrlMute" title="Mute/Unmute (M)">🔊</button>
+                    <input type="range" id="volSlider" class="vol-slider" min="0" max="1" step="0.05" value="1">
+                  </div>
+
+                  <span class="time-display" id="timeDisplay">0:00 / 0:00</span>
+                </div>
+
+                <div class="controls-right">
+                  <!-- Playback Speed -->
+                  <select id="speedSelect" class="speed-select" title="Playback Speed">
+                    <option value="0.25">0.25x</option>
+                    <option value="0.5">0.5x</option>
+                    <option value="0.75">0.75x</option>
+                    <option value="1" selected>1.0x (Normal)</option>
+                    <option value="1.25">1.25x</option>
+                    <option value="1.5">1.5x</option>
+                    <option value="1.75">1.75x</option>
+                    <option value="2">2.0x</option>
+                  </select>
+
+                  <button class="ctrl-btn" id="ctrlLoop" title="Toggle Loop">🔁</button>
+                  <button class="ctrl-btn" id="ctrlPiP" title="Picture-in-Picture">📺</button>
+                  <button class="ctrl-btn" id="ctrlFullscreen" title="Fullscreen (F)">⛶</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-top:8px;">
+            <div>
+              <h1 id="watchTitle" style="font-size:18px; font-weight:700;">Video Title</h1>
+              <div id="watchMeta" style="color:var(--on-surface-muted); font-size:13px; margin-top:4px;">Channel • File size • Duration</div>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <input type="file" id="subtitleFileInput" accept=".srt,.vtt" style="display:none;">
+              <button class="btn" id="btnLoadSubtitles" title="Load .srt or .vtt subtitle file">💬 Subtitles</button>
+              <button class="btn" id="btnFavorite">⭐ Favorite</button>
+              <button class="btn" id="btnAddToPlaylist">➕ Add to Playlist</button>
+              <button class="btn" id="btnRevealFile">📂 Open Folder</button>
+            </div>
+          </div>
+
+          <!-- Notes / Bookmarks Section -->
+          <div style="margin-top:20px; background:var(--surface-elevated); border:1px solid var(--divider); border-radius:10px; padding:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <h3 style="font-size:14px; font-weight:700;">📌 Timestamped Notes & Bookmarks</h3>
+              <div style="display:flex; gap:8px;">
+                <button class="btn" id="btnExportNotes" style="padding:4px 10px; font-size:12px;">💾 Export (.txt)</button>
+                <button class="btn" id="btnAddNote" style="padding:4px 10px; font-size:12px;">+ Add at Current Time</button>
+              </div>
+            </div>
+            <div id="notesList" style="display:flex; flex-direction:column; gap:8px; font-size:13px;"></div>
+          </div>
+        </div>
+
+        <!-- Up Next Queue -->
+        <div class="watch-side-queue">
+          <h3 style="font-size:15px; font-weight:700;">Up Next</h3>
+          <div id="upNextList" style="display:flex; flex-direction:column; gap:12px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mini Player Persistent Dock -->
+    <div class="mini-player-dock" id="miniPlayerDock">
+      <div class="mini-progress-bar" id="miniProgressBar"></div>
+      <img id="miniThumb" class="mini-thumb" src="" alt="">
+      <div class="mini-info">
+        <div id="miniTitle" class="mini-title">Playing Video</div>
+        <div id="miniChannel" style="font-size:11px; color:var(--on-surface-muted);">Channel Name</div>
+      </div>
+      <div class="mini-controls">
+        <button class="btn" id="btnMiniRewind" title="Rewind 10s" style="padding:4px 6px; font-size:11px;">↺10</button>
+        <button class="btn" id="btnMiniPlayPause" title="Play/Pause" style="padding:4px 8px; font-size:12px;">⏸</button>
+        <button class="btn" id="btnMiniForward" title="Forward 10s" style="padding:4px 6px; font-size:11px;">10↻</button>
+        <button class="btn" id="btnMiniExpand" title="Expand to Watch Page" style="padding:4px 8px; font-size:12px;">⛶</button>
+        <button class="btn" id="btnMiniClose" title="Close Mini Player" style="padding:4px 8px; font-size:12px;">✕</button>
+      </div>
+    </div>
+
+    <!-- Floating Shortcuts Hint -->
+    <div class="shortcuts-hint">
+      <span><span class="kbd-pill">/</span> Search</span>
+      <span><span class="kbd-pill">Space</span> Play/Pause</span>
+      <span><span class="kbd-pill">←</span><span class="kbd-pill">→</span> ±10s</span>
+      <span><span class="kbd-pill">F</span> Fullscreen</span>
+      <span><span class="kbd-pill">Ctrl+D</span> Debug</span>
+      <span><span class="kbd-pill">Esc</span> Back</span>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Diagnostics & Debug Log HUD (Toggle with Ctrl+D) -->
+  <div class="debug-hud" id="debugHud">
+    <div class="debug-header">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="color:var(--accent);">●</span>
+        <span>LocalVancedYT Diagnostics & Activity Console</span>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" id="btnClearLogs" style="padding:2px 8px; font-size:11px;">Clear</button>
+        <button class="btn" id="btnCloseDebug" style="padding:2px 8px; font-size:11px;">✕ Close (Ctrl+D)</button>
+      </div>
+    </div>
+    <div class="debug-logs" id="debugLogs"></div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
