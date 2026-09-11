@@ -1,6 +1,8 @@
 :root {
   --surface: #0f1012;
+  --surface-glass: rgba(15, 16, 18, 0.82);
   --surface-elevated: #1a1b1e;
+  --surface-glass-elevated: rgba(26, 27, 30, 0.88);
   --surface-hover: #26282d;
   --surface-active: #30333a;
   --on-surface: #f1f2f4;
@@ -8,9 +10,11 @@
   --on-surface-subtle: #5f6368;
   --accent: #5bbfb5;
   --accent-dim: #2e5c58;
-  --accent-glow: rgba(91, 191, 181, 0.18);
+  --accent-glow: rgba(91, 191, 181, 0.22);
   --divider: #282a2e;
   --danger: #e06c75;
+  --card-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --card-shadow-hover: 0 10px 28px rgba(0, 0, 0, 0.55);
   --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --sidebar-w: 240px;
   --header-h: 56px;
@@ -19,7 +23,9 @@
 
 [data-theme="light"] {
   --surface: #f8f9fa;
+  --surface-glass: rgba(248, 249, 250, 0.85);
   --surface-elevated: #ffffff;
+  --surface-glass-elevated: rgba(255, 255, 255, 0.88);
   --surface-hover: #e8eaed;
   --surface-active: #dadce0;
   --on-surface: #202124;
@@ -27,13 +33,17 @@
   --on-surface-subtle: #80868b;
   --accent: #1a73e8;
   --accent-dim: #aecbfa;
-  --accent-glow: rgba(26, 115, 232, 0.15);
+  --accent-glow: rgba(26, 115, 232, 0.18);
   --divider: #dadce0;
+  --card-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+  --card-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 [data-theme="cyber"] {
   --surface: #0a0b10;
+  --surface-glass: rgba(10, 11, 16, 0.85);
   --surface-elevated: #12131c;
+  --surface-glass-elevated: rgba(18, 19, 28, 0.88);
   --surface-hover: #1c1e2b;
   --surface-active: #25283a;
   --on-surface: #e2e8f0;
@@ -41,13 +51,17 @@
   --on-surface-subtle: #4a5568;
   --accent: #00ffcc;
   --accent-dim: #007a61;
-  --accent-glow: rgba(0, 255, 204, 0.2);
+  --accent-glow: rgba(0, 255, 204, 0.25);
   --divider: #1f2333;
+  --card-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  --card-shadow-hover: 0 10px 28px rgba(0, 255, 204, 0.2);
 }
 
 [data-theme="amoled"] {
   --surface: #000000;
+  --surface-glass: rgba(0, 0, 0, 0.88);
   --surface-elevated: #0d0d0d;
+  --surface-glass-elevated: rgba(13, 13, 13, 0.9);
   --surface-hover: #171717;
   --surface-active: #222222;
   --on-surface: #ffffff;
@@ -55,8 +69,10 @@
   --on-surface-subtle: #555555;
   --accent: #ff0055;
   --accent-dim: #80002b;
-  --accent-glow: rgba(255, 0, 85, 0.2);
+  --accent-glow: rgba(255, 0, 85, 0.25);
   --divider: #222222;
+  --card-shadow: 0 4px 16px rgba(0, 0, 0, 0.8);
+  --card-shadow-hover: 0 10px 28px rgba(255, 0, 85, 0.22);
 }
 
 * {
@@ -80,12 +96,14 @@ body {
 /* Header */
 .app-header {
   height: var(--header-h);
-  background: var(--surface);
+  background: var(--surface-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--divider);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 20px;
   gap: 16px;
   z-index: 100;
 }
@@ -96,6 +114,11 @@ body {
   gap: 12px;
   width: var(--sidebar-w);
   cursor: pointer;
+  transition: transform 0.15s;
+}
+
+.logo-area:hover {
+  transform: scale(1.01);
 }
 
 .logo-icon {
@@ -109,6 +132,7 @@ body {
   justify-content: center;
   font-weight: 900;
   font-size: 16px;
+  box-shadow: 0 2px 8px var(--accent-glow);
 }
 
 .logo-text {
@@ -141,20 +165,62 @@ body {
 
 .search-input {
   width: 100%;
-  height: 38px;
+  height: 40px;
   background: var(--surface-elevated);
   border: 1px solid var(--divider);
   border-radius: 20px;
-  padding: 0 40px 0 16px;
+  padding: 0 68px 0 18px;
   color: var(--on-surface);
-  font-size: 14px;
+  font-size: 13.5px;
   outline: none;
-  transition: all 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
 }
 
 .search-input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+  background: var(--surface-hover);
+}
+
+.search-clear-btn {
+  position: absolute;
+  right: 40px;
+  background: transparent;
+  border: none;
+  color: var(--on-surface-muted);
+  cursor: pointer;
+  font-size: 12px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s, transform 0.15s;
+}
+
+.search-clear-btn:hover {
+  color: var(--on-surface);
+  background: var(--surface-active);
+  transform: scale(1.1);
+}
+
+.search-kbd-hint {
+  position: absolute;
+  right: 14px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--on-surface-subtle);
+  background: var(--surface-hover);
+  border: 1px solid var(--divider);
+  padding: 1px 6px;
+  border-radius: 4px;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+
+.search-input:focus ~ .search-kbd-hint {
+  opacity: 0.3;
 }
 
 .search-icon {
@@ -175,15 +241,15 @@ body {
   background: var(--surface-elevated);
   color: var(--on-surface);
   border: 1px solid var(--divider);
-  padding: 7px 14px;
+  padding: 7px 15px;
   border-radius: 18px;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
 }
 
 .btn:hover {
@@ -191,16 +257,21 @@ body {
   border-color: var(--on-surface-muted);
 }
 
+.btn:active {
+  transform: scale(0.96);
+}
+
 .btn-accent {
   background: var(--accent);
   color: #0d1117;
-  border: none;
+  border: 1px solid transparent;
   font-weight: 600;
+  box-shadow: 0 2px 8px var(--accent-glow);
 }
 
 .btn-accent:hover {
-  filter: brightness(1.1);
-  background: var(--accent);
+  filter: brightness(1.08);
+  box-shadow: 0 4px 14px var(--accent-glow);
 }
 
 /* App Body Layout */
@@ -228,23 +299,26 @@ body {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 10px 14px;
+  padding: 9px 14px;
   border-radius: 10px;
   font-size: 13.5px;
   font-weight: 500;
   color: var(--on-surface);
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s ease, transform 0.15s ease, color 0.15s ease;
+  border-left: 3px solid transparent;
 }
 
 .nav-item:hover {
   background: var(--surface-hover);
+  transform: translateX(3px);
 }
 
 .nav-item.active {
   background: var(--surface-active);
   color: var(--accent);
   font-weight: 600;
+  border-left: 3px solid var(--accent);
 }
 
 .sidebar-heading {
@@ -270,12 +344,14 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 24px;
+  padding: 10px 24px;
   gap: 12px;
-  background: var(--surface);
+  background: var(--surface-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 15;
   border-bottom: 1px solid var(--divider);
 }
 
@@ -298,11 +374,13 @@ body {
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: all 0.15s;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease, color 0.15s ease;
 }
 
 .chip:hover {
   background: var(--surface-hover);
+  border-color: var(--on-surface-subtle);
+  transform: translateY(-1px);
 }
 
 .chip.active {
@@ -310,6 +388,7 @@ body {
   color: #0f1012;
   border-color: var(--accent);
   font-weight: 600;
+  box-shadow: 0 2px 10px var(--accent-glow);
 }
 
 .sort-select {
@@ -359,11 +438,17 @@ body {
   flex-direction: column;
   gap: 10px;
   cursor: pointer;
-  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 8px;
+  border-radius: 12px;
+  background: transparent;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), background 0.2s ease, box-shadow 0.2s ease;
+  contain: layout style;
 }
 
 .video-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  background: var(--surface-hover);
+  box-shadow: var(--card-shadow-hover);
 }
 
 .thumbnail-wrap {
@@ -374,32 +459,47 @@ body {
   position: relative;
   overflow: hidden;
   border: 1px solid var(--divider);
+  box-shadow: var(--card-shadow);
 }
 
 .thumbnail-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+
+.video-card:hover .thumbnail-img {
+  transform: scale(1.038);
 }
 
 .duration-pill {
   position: absolute;
   bottom: 8px;
   right: 8px;
-  background: rgba(0, 0, 0, 0.85);
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   color: #fff;
   font-size: 11px;
   font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 2.5px 7px;
+  border-radius: 5px;
+  letter-spacing: 0.02em;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
 .resume-bar {
   position: absolute;
   bottom: 0;
   left: 0;
-  height: 3px;
+  height: 3.5px;
   background: var(--accent);
+  border-top-right-radius: 3px;
+  border-bottom-right-radius: 3px;
+  box-shadow: 0 0 6px var(--accent-glow);
 }
 
 /* Skeleton Shimmer & Modern Placeholders */
@@ -463,19 +563,20 @@ body {
 }
 
 .btn-add-tag {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.04);
   border: 1px dashed var(--on-surface-subtle);
   color: var(--on-surface-muted);
   font-size: 10.5px;
-  padding: 1px 6px;
+  padding: 2px 7px;
   border-radius: 4px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.15s ease;
 }
 
 .btn-add-tag:hover {
   border-color: var(--accent);
   color: var(--accent);
+  background: var(--surface-active);
 }
 
 .card-info {
@@ -488,13 +589,15 @@ body {
   height: 36px;
   border-radius: 50%;
   background: var(--surface-active);
-  color: var(--accent);
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 14px;
+  font-size: 13.5px;
   flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 .card-details {
@@ -579,6 +682,8 @@ body {
   position: sticky;
   top: 12px;
   z-index: 20;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .main-video-player {
@@ -594,7 +699,7 @@ body {
   bottom: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.88));
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.9));
   padding: 8px 16px 10px;
   display: flex;
   flex-direction: column;
@@ -613,10 +718,10 @@ body {
 .progress-bar-wrap {
   position: relative;
   height: 5px;
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.22);
   border-radius: 4px;
   cursor: pointer;
-  transition: height 0.15s ease;
+  transition: height 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .progress-bar-wrap:hover {
@@ -639,7 +744,7 @@ body {
   top: 0;
   left: 0;
   bottom: 0;
-  background: var(--accent);
+  background: linear-gradient(90deg, var(--accent), #ff0055);
   border-radius: 4px;
   width: 0%;
   pointer-events: none;
@@ -650,31 +755,38 @@ body {
   top: 50%;
   left: 0%;
   transform: translate(-50%, -50%);
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 6px rgba(0,0,0,0.6);
+  background: #fff;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.7);
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity 0.15s, transform 0.15s;
   pointer-events: none;
 }
 
 .progress-bar-wrap:hover .progress-scrubber {
   opacity: 1;
+  transform: translate(-50%, -50%) scale(1.15);
 }
 
 .scrub-time-tooltip {
   position: absolute;
-  top: -28px;
+  top: -30px;
   transform: translateX(-50%);
-  background: rgba(0,0,0,0.85);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 11px;
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
   font-family: monospace;
+  color: #fff;
   display: none;
   pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
 .controls-row {
@@ -695,17 +807,21 @@ body {
   color: #fff;
   font-size: 15px;
   cursor: pointer;
-  padding: 4px 6px;
-  border-radius: 6px;
+  padding: 5px 7px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s, transform 0.1s;
+  transition: background 0.15s ease, transform 0.1s ease;
 }
 
 .ctrl-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
-  transform: scale(1.06);
+  background: rgba(255, 255, 255, 0.18);
+  transform: scale(1.08);
+}
+
+.ctrl-btn:active {
+  transform: scale(0.92);
 }
 
 .ctrl-btn.active {
@@ -844,18 +960,20 @@ body {
   background: var(--surface-elevated);
   border: 1px solid var(--divider);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
   flex-shrink: 0;
 }
 
 .queue-item-row:hover {
   background: var(--surface-hover);
-  border-color: var(--accent-dim);
+  border-color: var(--on-surface-subtle);
+  transform: translateX(2px);
 }
 
 .queue-item-row.active {
   border-color: var(--accent);
-  background: rgba(255, 0, 0, 0.09);
+  background: var(--accent-glow);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 /* Spotify-Style Bottom Persistent Player Bar */
@@ -864,21 +982,22 @@ body {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 74px;
-  background: var(--surface-elevated);
-  border-top: 1px solid var(--divider);
-  box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.65);
+  height: 76px;
+  background: var(--surface-glass-elevated);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.7);
   z-index: 250;
   display: none;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
+  padding: 0 24px;
   gap: 20px;
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
 }
 
 body.dock-active .main-view {
-  padding-bottom: 84px;
+  padding-bottom: 86px;
 }
 
 .spotify-dock.active {
@@ -903,6 +1022,7 @@ body.dock-active .main-view {
   position: relative;
   cursor: pointer;
   flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
 .spotify-thumb {
@@ -1002,18 +1122,29 @@ body.dock-active .main-view {
 }
 
 .spotify-play-btn {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: var(--on-surface);
-  color: var(--surface-bg);
+  color: #000;
   border: none;
-  font-size: 14px;
+  font-size: 15px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: transform 0.15s, background 0.15s;
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), background 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.spotify-play-btn:hover {
+  transform: scale(1.08);
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(255, 255, 255, 0.3);
+}
+
+.spotify-play-btn:active {
+  transform: scale(0.94);
 }
 
 .spotify-play-btn:hover {
@@ -1102,6 +1233,83 @@ body.dock-active .main-view {
   gap: 12px;
   width: 280px;
   min-width: 200px;
+}
+
+/* Custom Culling Checkbox & Stat Cards */
+.culling-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--on-surface-subtle);
+  border-radius: 4px;
+  background: var(--surface-elevated);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: all 0.15s ease;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.culling-checkbox:hover {
+  border-color: var(--accent);
+}
+
+.culling-checkbox:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.culling-checkbox:checked::after {
+  content: "✓";
+  color: #0f1012;
+  font-size: 12px;
+  font-weight: 800;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.culling-stat-cards {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.culling-stat-card {
+  background: var(--surface-elevated);
+  border: 1px solid var(--divider);
+  border-radius: 10px;
+  padding: 12px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 140px;
+  box-shadow: var(--card-shadow);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.culling-stat-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--on-surface-subtle);
+}
+
+.culling-stat-num {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+}
+
+.culling-stat-label {
+  font-size: 11.5px;
+  color: var(--on-surface-muted);
+  font-weight: 500;
 }
 
 /* Custom Sleek Scrollbars */

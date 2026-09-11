@@ -1201,9 +1201,14 @@ function renderCullingView(container) {
   // Calculate selected metrics
   const selectedItems = state.media.filter(m => selectedCullingIds.has(m.id));
   const selectedBytes = selectedItems.reduce((acc, m) => acc + (m.sizeBytes || 0), 0);
+  const totalLibraryBytes = state.media.reduce((acc, m) => acc + (m.sizeBytes || 0), 0);
+  const watchedCount = state.media.filter(m => {
+    const hist = state.history[m.id];
+    return hist && m.durationSec && hist.positionSec >= m.durationSec * 0.9;
+  }).length;
 
   wrapper.innerHTML = `
-    <div style="background:var(--surface-elevated); border:1px solid var(--divider); border-radius:12px; padding:20px; display:flex; flex-direction:column; gap:14px;">
+    <div style="background:var(--surface-elevated); border:1px solid var(--divider); border-radius:12px; padding:20px; display:flex; flex-direction:column; gap:16px;">
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
         <div>
           <h2 style="font-size:18px; font-weight:700; display:flex; align-items:center; gap:8px;">
@@ -1214,14 +1219,31 @@ function renderCullingView(container) {
           </p>
         </div>
         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-          <span style="font-size:13px; font-weight:600; color:var(--accent);">
-            Selected: ${selectedCullingIds.size} files (${formatBytes(selectedBytes)})
-          </span>
-          <button class="btn" id="btnCullingSelectAll" style="font-size:12px; padding:5px 12px;">Select All</button>
-          <button class="btn" id="btnCullingDeselectAll" style="font-size:12px; padding:5px 12px;">Deselect</button>
-          <button class="btn btn-accent" id="btnTrashSelected" style="font-size:12px; padding:5px 14px; background:var(--danger); border-color:var(--danger);" ${selectedCullingIds.size === 0 ? 'disabled' : ''}>
+          <button class="btn" id="btnCullingSelectAll" style="font-size:12px; padding:6px 13px;">Select All</button>
+          <button class="btn" id="btnCullingDeselectAll" style="font-size:12px; padding:6px 13px;">Deselect</button>
+          <button class="btn btn-accent" id="btnTrashSelected" style="font-size:12px; padding:6px 15px; background:var(--danger); border-color:var(--danger);" ${selectedCullingIds.size === 0 ? 'disabled' : ''}>
             🗑️ Move to Recycle Bin (${formatBytes(selectedBytes)})
           </button>
+        </div>
+      </div>
+
+      <!-- Quick Summary Stat Cards -->
+      <div class="culling-stat-cards">
+        <div class="culling-stat-card">
+          <span class="culling-stat-num">${state.media.length}</span>
+          <span class="culling-stat-label">Total Indexed Files</span>
+        </div>
+        <div class="culling-stat-card">
+          <span class="culling-stat-num">${formatBytes(totalLibraryBytes)}</span>
+          <span class="culling-stat-label">Total Library Storage</span>
+        </div>
+        <div class="culling-stat-card">
+          <span class="culling-stat-num" style="color:var(--accent);">${watchedCount}</span>
+          <span class="culling-stat-label">Watched / Finished (&gt;90%)</span>
+        </div>
+        <div class="culling-stat-card">
+          <span class="culling-stat-num" style="color:${selectedCullingIds.size > 0 ? 'var(--danger)' : 'var(--on-surface-muted)'};">${formatBytes(selectedBytes)}</span>
+          <span class="culling-stat-label">Selected to Reclaim (${selectedCullingIds.size} files)</span>
         </div>
       </div>
 
@@ -1331,7 +1353,7 @@ function renderCullingView(container) {
 
     row.innerHTML = `
       <div style="display:flex; align-items:center; gap:14px; flex:1; overflow:hidden;">
-        <input type="checkbox" class="culling-checkbox" ${isSelected ? 'checked' : ''} style="width:16px; height:16px; cursor:pointer; accent-color:var(--accent);">
+        <input type="checkbox" class="culling-checkbox" ${isSelected ? 'checked' : ''}>
         <div style="width:80px; aspect-ratio:16/9; background:#000; border-radius:4px; overflow:hidden; position:relative; flex-shrink:0;">
           <img src="${item.thumbnailUrl || ''}" class="card-thumb-${item.id}" style="${item.thumbnailUrl ? '' : 'display:none;'} width:100%; height:100%; object-fit:cover;">
           <span class="duration-pill card-dur-${item.id}" style="font-size:10px; padding:1px 4px;">${formatDuration(item.durationSec)}</span>
@@ -1471,6 +1493,25 @@ const lazyThumbObserver = new IntersectionObserver((entries, observer) => {
   rootMargin: '250px 0px'
 });
 
+function getAvatarGradient(name) {
+  const gradients = [
+    'linear-gradient(135deg, #ff416c, #ff4b2b)',
+    'linear-gradient(135deg, #4776e6, #8e54e9)',
+    'linear-gradient(135deg, #00b09b, #96c93d)',
+    'linear-gradient(135deg, #f857a6, #ff5858)',
+    'linear-gradient(135deg, #2193b0, #6dd5ed)',
+    'linear-gradient(135deg, #cc2b5e, #753a88)',
+    'linear-gradient(135deg, #11998e, #38ef7d)',
+    'linear-gradient(135deg, #fc4a1a, #f7b733)',
+    'linear-gradient(135deg, #1f4037, #99f2c8)',
+    'linear-gradient(135deg, #e65c00, #f9d423)'
+  ];
+  let hash = 0;
+  for (let i = 0; i < (name || '').length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  const idx = Math.abs(hash) % gradients.length;
+  return gradients[idx];
+}
+
 function createVideoCard(item, isShelf) {
   const card = document.createElement('div');
   card.className = 'video-card';
@@ -1496,7 +1537,7 @@ function createVideoCard(item, isShelf) {
       ${progressPct > 0 ? `<div class="resume-bar" style="width:${progressPct}%"></div>` : ''}
     </div>
     <div class="card-info">
-      <div class="card-avatar">${initial}</div>
+      <div class="card-avatar" style="background:${getAvatarGradient(item.folderName)};">${initial}</div>
       <div class="card-details">
         <div class="card-title" title="${item.title}">${item.title}</div>
         <div class="card-meta">
@@ -2164,10 +2205,26 @@ document.getElementById('btnToggleTheme').onclick = () => {
   switchTheme(themes[nextIdx]);
 };
 
-document.getElementById('searchInput').oninput = (e) => {
+const searchInputEl = document.getElementById('searchInput');
+const searchClearBtn = document.getElementById('searchClearBtn');
+
+searchInputEl.oninput = (e) => {
   state.searchQuery = e.target.value;
+  if (searchClearBtn) {
+    searchClearBtn.style.display = state.searchQuery ? 'flex' : 'none';
+  }
   renderFeed();
 };
+
+if (searchClearBtn) {
+  searchClearBtn.onclick = () => {
+    searchInputEl.value = '';
+    state.searchQuery = '';
+    searchClearBtn.style.display = 'none';
+    searchInputEl.focus();
+    renderFeed();
+  };
+}
 
 document.getElementById('sortSelect').onchange = (e) => {
   state.activeSort = e.target.value;
