@@ -833,6 +833,12 @@ function renderFeed() {
     return;
   }
 
+  // Special view: Culling & Cleanup Manager
+  if (state.activeNav === 'culling') {
+    renderCullingView(container);
+    return;
+  }
+
   // Special view: Settings
   if (state.activeNav === 'settings') {
     renderSettingsView(container);
@@ -1154,6 +1160,233 @@ function renderSettingsView(container) {
 
   wrapper.querySelector('#btnSettingsBackup').onclick = exportBackup;
   wrapper.querySelector('#btnSettingsRestore').onclick = () => document.getElementById('restoreFileInput')?.click();
+}
+
+// Media Culling & Cleanup Manager View (Windows Recycle Bin Deletion)
+let cullingFilter = 'all';
+const selectedCullingIds = new Set();
+
+function renderCullingView(container) {
+  const wrapper = document.createElement('div');
+  wrapper.style.display = 'flex';
+  wrapper.style.flexDirection = 'column';
+  wrapper.style.gap = '20px';
+
+  // Calculate items matching cullingFilter
+  let list = [...state.media];
+  if (cullingFilter === 'watched') {
+    list = list.filter(m => {
+      const hist = state.history[m.id];
+      return hist && m.durationSec && hist.positionSec >= m.durationSec * 0.9;
+    });
+  } else if (cullingFilter === 'large') {
+    list = list.filter(m => m.sizeBytes >= 1024 * 1024 * 1024); // >= 1 GB
+  } else if (cullingFilter === 'medium') {
+    list = list.filter(m => m.sizeBytes >= 500 * 1024 * 1024 && m.sizeBytes < 1024 * 1024 * 1024); // 500 MB - 1 GB
+  } else if (cullingFilter === 'duplicates') {
+    const sizeMap = new Map();
+    state.media.forEach(m => {
+      if (!sizeMap.has(m.sizeBytes)) sizeMap.set(m.sizeBytes, []);
+      sizeMap.get(m.sizeBytes).push(m);
+    });
+    const dupes = new Set();
+    sizeMap.forEach(group => {
+      if (group.length > 1) {
+        group.forEach(m => dupes.add(m));
+      }
+    });
+    list = Array.from(dupes);
+  }
+
+  // Calculate selected metrics
+  const selectedItems = state.media.filter(m => selectedCullingIds.has(m.id));
+  const selectedBytes = selectedItems.reduce((acc, m) => acc + (m.sizeBytes || 0), 0);
+
+  wrapper.innerHTML = `
+    <div style="background:var(--surface-elevated); border:1px solid var(--divider); border-radius:12px; padding:20px; display:flex; flex-direction:column; gap:14px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+        <div>
+          <h2 style="font-size:18px; font-weight:700; display:flex; align-items:center; gap:8px;">
+            <span>🗑️ Media Culling & Disk Cleanup</span>
+          </h2>
+          <p style="font-size:12.5px; color:var(--on-surface-muted); margin-top:3px;">
+            Identify finished, heavy, or duplicate files and safely move them to your <strong>Windows Recycle Bin</strong> to reclaim storage.
+          </p>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span style="font-size:13px; font-weight:600; color:var(--accent);">
+            Selected: ${selectedCullingIds.size} files (${formatBytes(selectedBytes)})
+          </span>
+          <button class="btn" id="btnCullingSelectAll" style="font-size:12px; padding:5px 12px;">Select All</button>
+          <button class="btn" id="btnCullingDeselectAll" style="font-size:12px; padding:5px 12px;">Deselect</button>
+          <button class="btn btn-accent" id="btnTrashSelected" style="font-size:12px; padding:5px 14px; background:var(--danger); border-color:var(--danger);" ${selectedCullingIds.size === 0 ? 'disabled' : ''}>
+            🗑️ Move to Recycle Bin (${formatBytes(selectedBytes)})
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Culling Filter Chips -->
+      <div style="display:flex; gap:8px; flex-wrap:wrap; border-top:1px solid var(--divider); padding-top:12px;">
+        <button class="chip ${cullingFilter === 'all' ? 'active' : ''}" data-cfilter="all">All Media (${state.media.length})</button>
+        <button class="chip ${cullingFilter === 'watched' ? 'active' : ''}" data-cfilter="watched">✓ Watched / Finished (>90%)</button>
+        <button class="chip ${cullingFilter === 'large' ? 'active' : ''}" data-cfilter="large">📦 Large Files (&gt; 1 GB)</button>
+        <button class="chip ${cullingFilter === 'medium' ? 'active' : ''}" data-cfilter="medium">📁 Medium Files (500 MB - 1 GB)</button>
+        <button class="chip ${cullingFilter === 'duplicates' ? 'active' : ''}" data-cfilter="duplicates">👯 Duplicate Suspects</button>
+      </div>
+    </div>
+
+    <!-- Items Table / List -->
+    <div style="background:var(--surface-elevated); border:1px solid var(--divider); border-radius:12px; overflow:hidden;">
+      <div style="padding:12px 18px; border-bottom:1px solid var(--divider); display:flex; align-items:center; justify-content:space-between; font-size:12px; font-weight:700; color:var(--on-surface-muted);">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span>Select</span>
+          <span>Title & Channel</span>
+        </div>
+        <div style="display:flex; gap:40px; align-items:center;">
+          <span>Duration</span>
+          <span style="width:90px; text-align:right;">Size</span>
+          <span style="width:110px; text-align:center;">Actions</span>
+        </div>
+      </div>
+      <div id="cullingItemsList" style="display:flex; flex-direction:column;"></div>
+    </div>
+  `;
+
+  container.appendChild(wrapper);
+
+  // Wire filter buttons
+  wrapper.querySelectorAll('button[data-cfilter]').forEach(btn => {
+    btn.onclick = () => {
+      cullingFilter = btn.dataset.cfilter;
+      renderFeed();
+    };
+  });
+
+  // Wire selection buttons
+  wrapper.querySelector('#btnCullingSelectAll').onclick = () => {
+    list.forEach(m => selectedCullingIds.add(m.id));
+    renderFeed();
+  };
+
+  wrapper.querySelector('#btnCullingDeselectAll').onclick = () => {
+    selectedCullingIds.clear();
+    renderFeed();
+  };
+
+  // Wire Trash Selected Action
+  wrapper.querySelector('#btnTrashSelected').onclick = async () => {
+    if (selectedCullingIds.size === 0) return;
+    const itemsToTrash = state.media.filter(m => selectedCullingIds.has(m.id));
+    const totalBytes = itemsToTrash.reduce((acc, m) => acc + (m.sizeBytes || 0), 0);
+    
+    const confirmMsg = `Are you sure you want to move ${itemsToTrash.length} file(s) (${formatBytes(totalBytes)}) to the Windows Recycle Bin?\n\n` +
+      itemsToTrash.slice(0, 5).map(m => `• ${m.title}`).join('\n') +
+      (itemsToTrash.length > 5 ? `\n...and ${itemsToTrash.length - 5} more` : '') +
+      `\n\n(Files are safely sent to your Recycle Bin and can be restored if needed).`;
+
+    if (!confirm(confirmMsg)) return;
+
+    if (window.api && window.api.trashBatch) {
+      showToast(`Moving ${itemsToTrash.length} files to Recycle Bin...`, 'info');
+      const filePaths = itemsToTrash.map(m => m.filePath).filter(Boolean);
+      const results = await window.api.trashBatch(filePaths);
+      
+      const successfulPaths = new Set(results.filter(r => r.success).map(r => r.path));
+      
+      state.media = state.media.filter(m => !successfulPaths.has(m.filePath));
+      itemsToTrash.forEach(m => {
+        delete state.history[m.id];
+        delete state.notes[m.id];
+        delete state.tags[m.id];
+        state.favorites.delete(m.id);
+        Object.keys(state.playlists).forEach(pl => {
+          state.playlists[pl] = state.playlists[pl].filter(id => id !== m.id);
+        });
+      });
+      selectedCullingIds.clear();
+      await saveStateToDisk();
+      showToast(`Successfully moved ${successfulPaths.size} files to Recycle Bin!`, 'success');
+      logMessage('SUCCESS', `Moved ${successfulPaths.size} files to Windows Recycle Bin.`);
+      renderAll();
+    } else {
+      state.media = state.media.filter(m => !selectedCullingIds.has(m.id));
+      selectedCullingIds.clear();
+      await saveStateToDisk();
+      showToast('Removed files from library index.', 'info');
+      renderAll();
+    }
+  };
+
+  // Populate list rows
+  const listEl = wrapper.querySelector('#cullingItemsList');
+  if (list.length === 0) {
+    listEl.innerHTML = `<div style="padding:40px; text-align:center; color:var(--on-surface-muted);">No files match the "${cullingFilter}" criteria.</div>`;
+    return;
+  }
+
+  list.forEach(item => {
+    const isSelected = selectedCullingIds.has(item.id);
+    const row = document.createElement('div');
+    row.style.cssText = `padding:10px 18px; border-bottom:1px solid var(--divider); display:flex; align-items:center; justify-content:space-between; transition:background 0.15s; background:${isSelected ? 'rgba(255, 0, 0, 0.06)' : 'transparent'};`;
+
+    row.innerHTML = `
+      <div style="display:flex; align-items:center; gap:14px; flex:1; overflow:hidden;">
+        <input type="checkbox" class="culling-checkbox" ${isSelected ? 'checked' : ''} style="width:16px; height:16px; cursor:pointer; accent-color:var(--accent);">
+        <div style="width:80px; aspect-ratio:16/9; background:#000; border-radius:4px; overflow:hidden; position:relative; flex-shrink:0;">
+          <img src="${item.thumbnailUrl || ''}" class="card-thumb-${item.id}" style="${item.thumbnailUrl ? '' : 'display:none;'} width:100%; height:100%; object-fit:cover;">
+          <span class="duration-pill card-dur-${item.id}" style="font-size:10px; padding:1px 4px;">${formatDuration(item.durationSec)}</span>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:2px; overflow:hidden;">
+          <div style="font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${item.title}">${item.title}</div>
+          <div style="font-size:11px; color:var(--on-surface-muted);">${item.folderName} • ${item.filePath}</div>
+        </div>
+      </div>
+      <div style="display:flex; gap:40px; align-items:center;">
+        <span style="font-size:12px; color:var(--on-surface-muted); font-family:monospace;">${formatDuration(item.durationSec)}</span>
+        <span style="font-size:12.5px; font-weight:600; width:90px; text-align:right; color:var(--on-surface);">${formatBytes(item.sizeBytes)}</span>
+        <div style="width:110px; display:flex; justify-content:center; gap:6px;">
+          <button class="btn btn-preview" title="Preview video" style="padding:3px 7px; font-size:11px;">▶</button>
+          <button class="btn btn-reveal" title="Show in folder" style="padding:3px 7px; font-size:11px;">📂</button>
+          <button class="btn btn-trash-single" title="Move to Recycle Bin" style="padding:3px 7px; font-size:11px; color:var(--danger);">🗑️</button>
+        </div>
+      </div>
+    `;
+
+    const cb = row.querySelector('.culling-checkbox');
+    cb.onchange = (e) => {
+      if (e.target.checked) {
+        selectedCullingIds.add(item.id);
+      } else {
+        selectedCullingIds.delete(item.id);
+      }
+      renderFeed();
+    };
+
+    row.querySelector('.btn-preview').onclick = () => openWatchPage(item);
+    row.querySelector('.btn-reveal').onclick = () => {
+      if (window.api && window.api.openInFolder) window.api.openInFolder(item.filePath);
+    };
+    row.querySelector('.btn-trash-single').onclick = async () => {
+      if (!confirm(`Move "${item.title}" (${formatBytes(item.sizeBytes)}) to the Windows Recycle Bin?\n\n(File can be restored from the Recycle Bin if needed).`)) return;
+      if (window.api && window.api.trashFile) {
+        const res = await window.api.trashFile(item.filePath);
+        if (res.success) {
+          state.media = state.media.filter(m => m.id !== item.id);
+          delete state.history[item.id];
+          delete state.notes[item.id];
+          delete state.tags[item.id];
+          selectedCullingIds.delete(item.id);
+          await saveStateToDisk();
+          showToast(`Moved "${item.title}" to Recycle Bin!`, 'success');
+          renderAll();
+        } else {
+          showToast(`Failed: ${res.error}`, 'error');
+        }
+      }
+    };
+
+    listEl.appendChild(row);
+  });
 }
 
 window.switchTheme = function(themeName) {

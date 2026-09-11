@@ -160,6 +160,38 @@ ipcMain.handle('shell:show-item', async (event, filePath) => {
   }
 });
 
+// IPC: Move File to Windows Recycle Bin
+ipcMain.handle('media:trash-file', async (event, filePath) => {
+  try {
+    if (fs.existsSync(filePath)) {
+      await shell.trashItem(filePath);
+      return { success: true };
+    }
+    return { success: false, error: 'File does not exist on disk' };
+  } catch (err) {
+    console.error('Failed to trash file:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+// IPC: Batch Trash Files to Windows Recycle Bin
+ipcMain.handle('media:trash-batch', async (event, filePaths) => {
+  const results = [];
+  for (const fp of filePaths) {
+    try {
+      if (fs.existsSync(fp)) {
+        await shell.trashItem(fp);
+        results.push({ path: fp, success: true });
+      } else {
+        results.push({ path: fp, success: false, error: 'File not found' });
+      }
+    } catch (err) {
+      results.push({ path: fp, success: false, error: err.message });
+    }
+  }
+  return results;
+});
+
 app.whenReady().then(() => {
   createWindow();
 
