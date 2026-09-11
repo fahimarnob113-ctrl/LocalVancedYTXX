@@ -228,20 +228,57 @@
       </div>
     </div>
 
-    <!-- Mini Player Persistent Dock -->
-    <div class="mini-player-dock" id="miniPlayerDock">
-      <div class="mini-progress-bar" id="miniProgressBar"></div>
-      <img id="miniThumb" class="mini-thumb" src="" alt="">
-      <div class="mini-info">
-        <div id="miniTitle" class="mini-title">Playing Video</div>
-        <div id="miniChannel" style="font-size:11px; color:var(--on-surface-muted);">Channel Name</div>
+    <!-- Spotify-Style Bottom Persistent Player Bar -->
+    <div class="spotify-dock" id="miniPlayerDock">
+      <!-- Left Zone: Media Details & Favorite -->
+      <div class="spotify-dock-left">
+        <div class="spotify-thumb-wrap" id="btnDockExpandThumb" title="Expand to Watch Page">
+          <img id="miniThumb" class="spotify-thumb" src="" alt="">
+          <div class="spotify-thumb-overlay">↗</div>
+        </div>
+        <div class="spotify-meta">
+          <div id="miniTitle" class="spotify-title" title="Expand to Watch Page">Playing Video</div>
+          <div id="miniChannel" class="spotify-channel">Channel Name</div>
+        </div>
+        <button class="spotify-icon-btn" id="btnDockFavorite" title="Toggle Favorite">☆</button>
       </div>
-      <div class="mini-controls">
-        <button class="btn" id="btnMiniRewind" title="Rewind 10s" style="padding:4px 6px; font-size:11px;">↺10</button>
-        <button class="btn" id="btnMiniPlayPause" title="Play/Pause" style="padding:4px 8px; font-size:12px;">⏸</button>
-        <button class="btn" id="btnMiniForward" title="Forward 10s" style="padding:4px 6px; font-size:11px;">10↻</button>
-        <button class="btn" id="btnMiniExpand" title="Expand to Watch Page" style="padding:4px 8px; font-size:12px;">⛶</button>
-        <button class="btn" id="btnMiniClose" title="Close Mini Player" style="padding:4px 8px; font-size:12px;">✕</button>
+
+      <!-- Center Zone: Transport Controls & Scrub Bar -->
+      <div class="spotify-dock-center">
+        <div class="spotify-controls-row">
+          <button class="spotify-icon-btn" id="btnDockShuffle" title="Shuffle Queue">🔀</button>
+          <button class="spotify-icon-btn" id="btnDockPrev" title="Previous (Shift+P)">⏮</button>
+          <button class="spotify-play-btn" id="btnMiniPlayPause" title="Play/Pause (Space)">▶</button>
+          <button class="spotify-icon-btn" id="btnDockNext" title="Next (Shift+N)">⏭</button>
+          <button class="spotify-icon-btn" id="btnDockLoop" title="Toggle Loop">🔁</button>
+        </div>
+        <div class="spotify-timeline-row">
+          <span class="spotify-time" id="dockTimeCurrent">0:00</span>
+          <div class="spotify-scrub-track" id="dockScrubTrack">
+            <div class="spotify-scrub-buffer" id="dockScrubBuffer"></div>
+            <div class="spotify-scrub-fill" id="dockScrubFill"></div>
+            <div class="spotify-scrub-knob" id="dockScrubKnob"></div>
+          </div>
+          <span class="spotify-time" id="dockTimeTotal">0:00</span>
+        </div>
+      </div>
+
+      <!-- Right Zone: Volume, Speed & Actions -->
+      <div class="spotify-dock-right">
+        <select id="dockSpeedSelect" class="speed-select" style="font-size:11px; padding:2px 6px;">
+          <option value="0.5">0.5x</option>
+          <option value="0.75">0.75x</option>
+          <option value="1" selected>1.0x</option>
+          <option value="1.25">1.25x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2">2.0x</option>
+        </select>
+        <div class="vol-control" style="gap:4px;">
+          <button class="spotify-icon-btn" id="btnDockMute" title="Mute/Unmute">🔊</button>
+          <input type="range" id="dockVolSlider" class="vol-slider" min="0" max="1" step="0.05" value="1" style="width:75px;">
+        </div>
+        <button class="spotify-icon-btn" id="btnMiniExpand" title="Expand to Watch Page (F)">↗</button>
+        <button class="spotify-icon-btn" id="btnMiniClose" title="Stop & Close Player">✕</button>
       </div>
     </div>
 

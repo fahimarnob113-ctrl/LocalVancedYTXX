@@ -1605,6 +1605,7 @@ let saveInterval = null;
 async function openWatchPage(item) {
   state.currentMedia = item;
   miniPlayer.classList.remove('active');
+  document.body.classList.remove('dock-active');
   watchOverlay.classList.add('active');
 
   document.getElementById('watchTitle').textContent = item.title;
@@ -1664,21 +1665,39 @@ function closeWatchPage(minimize = false) {
   if (saveInterval) clearInterval(saveInterval);
 
   if (state.currentMedia && !videoPlayer.paused && minimize) {
-    // Show mini player
     miniPlayer.classList.add('active');
-    document.getElementById('miniTitle').textContent = state.currentMedia.title;
-    document.getElementById('miniChannel').textContent = state.currentMedia.folderName;
-    const miniThumb = document.getElementById('miniThumb');
-    if (state.currentMedia.thumbnailUrl) {
-      miniThumb.src = state.currentMedia.thumbnailUrl;
-      miniThumb.style.display = 'block';
-    } else {
-      miniThumb.style.display = 'none';
-    }
+    document.body.classList.add('dock-active');
+    updateSpotifyDockState();
   } else {
     videoPlayer.pause();
+    miniPlayer.classList.remove('active');
+    document.body.classList.remove('dock-active');
   }
   renderFeed();
+}
+
+function updateSpotifyDockState() {
+  if (!state.currentMedia) return;
+  const m = state.currentMedia;
+  const titleEl = document.getElementById('miniTitle');
+  const channelEl = document.getElementById('miniChannel');
+  const thumbEl = document.getElementById('miniThumb');
+  const favBtn = document.getElementById('btnDockFavorite');
+
+  if (titleEl) titleEl.textContent = m.title;
+  if (channelEl) channelEl.textContent = m.folderName;
+  if (thumbEl) {
+    if (m.thumbnailUrl) {
+      thumbEl.src = m.thumbnailUrl;
+      thumbEl.style.display = 'block';
+    } else {
+      thumbEl.style.display = 'none';
+    }
+  }
+  if (favBtn) {
+    favBtn.textContent = state.favorites.has(m.id) ? '⭐' : '☆';
+    favBtn.classList.toggle('active', state.favorites.has(m.id));
+  }
 }
 
 function renderNotes(mediaId) {
@@ -2336,12 +2355,20 @@ videoPlayer.ontimeupdate = () => {
   const dur = videoPlayer.duration || 0;
   timeDisplay.textContent = `${formatDuration(cur)} / ${formatDuration(dur)}`;
 
+  const dockCur = document.getElementById('dockTimeCurrent');
+  const dockTot = document.getElementById('dockTimeTotal');
+  if (dockCur) dockCur.textContent = formatDuration(cur);
+  if (dockTot) dockTot.textContent = formatDuration(dur);
+
   if (dur > 0) {
     const pct = (cur / dur) * 100;
     progressPlayed.style.width = `${pct}%`;
     progressScrubber.style.left = `${pct}%`;
-    const miniBar = document.getElementById('miniProgressBar');
-    if (miniBar) miniBar.style.width = `${pct}%`;
+
+    const dockFill = document.getElementById('dockScrubFill');
+    const dockKnob = document.getElementById('dockScrubKnob');
+    if (dockFill) dockFill.style.width = `${pct}%`;
+    if (dockKnob) dockKnob.style.left = `${pct}%`;
   }
 };
 
@@ -2351,6 +2378,9 @@ videoPlayer.onprogress = () => {
     const bufferedEnd = videoPlayer.buffered.end(videoPlayer.buffered.length - 1);
     const pct = (bufferedEnd / videoPlayer.duration) * 100;
     progressBuffered.style.width = `${pct}%`;
+
+    const dockBuf = document.getElementById('dockScrubBuffer');
+    if (dockBuf) dockBuf.style.width = `${pct}%`;
   }
 };
 
@@ -2494,40 +2524,112 @@ ctrlFullscreen.onclick = () => {
   }
 };
 
-// Mini Player Controls
-document.getElementById('btnMiniRewind')?.addEventListener('click', (e) => {
+// Spotify-Style Bottom Dock Controls & Timeline Scrubber
+const dockScrubTrack = document.getElementById('dockScrubTrack');
+if (dockScrubTrack) {
+  dockScrubTrack.onclick = (e) => {
+    e.stopPropagation();
+    const rect = dockScrubTrack.getBoundingClientRect();
+    const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    if (videoPlayer.duration) {
+      videoPlayer.currentTime = pos * videoPlayer.duration;
+    }
+  };
+}
+
+document.getElementById('btnDockPrev')?.addEventListener('click', (e) => {
   e.stopPropagation();
-  videoPlayer.currentTime = Math.max(0, videoPlayer.currentTime - 10);
+  playPreviousVideo();
 });
 
-document.getElementById('btnMiniForward')?.addEventListener('click', (e) => {
+document.getElementById('btnDockNext')?.addEventListener('click', (e) => {
   e.stopPropagation();
-  videoPlayer.currentTime = Math.min(videoPlayer.duration || Infinity, videoPlayer.currentTime + 10);
+  playNextVideo();
+});
+
+document.getElementById('btnDockShuffle')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (state.manualQueue.length > 1) {
+    for (let i = state.manualQueue.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [state.manualQueue[i], state.manualQueue[j]] = [state.manualQueue[j], state.manualQueue[i]];
+    }
+    renderManualQueue();
+    showToast('Queue shuffled!', 'info');
+  } else {
+    showToast('Add more items to queue to shuffle.', 'info');
+  }
+});
+
+document.getElementById('btnDockLoop')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  videoPlayer.loop = !videoPlayer.loop;
+  ctrlLoop.classList.toggle('active', videoPlayer.loop);
+  document.getElementById('btnDockLoop').classList.toggle('active', videoPlayer.loop);
+  showToast(videoPlayer.loop ? 'Loop: ON' : 'Loop: OFF', 'info', 1500);
+});
+
+document.getElementById('btnDockFavorite')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (!state.currentMedia) return;
+  const id = state.currentMedia.id;
+  if (state.favorites.has(id)) {
+    state.favorites.delete(id);
+  } else {
+    state.favorites.add(id);
+  }
+  saveStateToDisk();
+  updateSpotifyDockState();
+  showToast(state.favorites.has(id) ? 'Saved to Favorites!' : 'Removed from Favorites.', 'info');
+});
+
+document.getElementById('dockVolSlider')?.addEventListener('input', (e) => {
+  videoPlayer.volume = parseFloat(e.target.value);
+  videoPlayer.muted = (videoPlayer.volume === 0);
+  volSlider.value = videoPlayer.volume;
+  ctrlMute.textContent = videoPlayer.muted ? '🔇' : '🔊';
+  document.getElementById('btnDockMute').textContent = videoPlayer.muted ? '🔇' : '🔊';
+});
+
+document.getElementById('btnDockMute')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  videoPlayer.muted = !videoPlayer.muted;
+  ctrlMute.textContent = videoPlayer.muted ? '🔇' : '🔊';
+  document.getElementById('btnDockMute').textContent = videoPlayer.muted ? '🔇' : '🔊';
+  document.getElementById('dockVolSlider').value = videoPlayer.muted ? 0 : videoPlayer.volume;
+});
+
+document.getElementById('dockSpeedSelect')?.addEventListener('change', (e) => {
+  videoPlayer.playbackRate = parseFloat(e.target.value);
+  speedSelect.value = e.target.value;
+  showToast(`Speed: ${e.target.value}x`, 'info', 1500);
 });
 
 document.getElementById('btnMiniPlayPause').onclick = (e) => {
   e.stopPropagation();
-  if (videoPlayer.paused) {
-    videoPlayer.play();
-    document.getElementById('btnMiniPlayPause').textContent = '⏸';
-  } else {
-    videoPlayer.pause();
-    document.getElementById('btnMiniPlayPause').textContent = '▶';
-  }
+  togglePlayPause();
 };
 
-document.getElementById('btnMiniExpand').onclick = () => {
+document.getElementById('btnMiniExpand').onclick = (e) => {
+  e.stopPropagation();
   if (state.currentMedia) openWatchPage(state.currentMedia);
 };
+
+document.getElementById('btnDockExpandThumb')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (state.currentMedia) openWatchPage(state.currentMedia);
+});
+
+document.getElementById('miniTitle')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (state.currentMedia) openWatchPage(state.currentMedia);
+});
 
 document.getElementById('btnMiniClose').onclick = (e) => {
   e.stopPropagation();
   videoPlayer.pause();
   miniPlayer.classList.remove('active');
-};
-
-document.getElementById('miniPlayerDock').onclick = () => {
-  if (state.currentMedia) openWatchPage(state.currentMedia);
+  document.body.classList.remove('dock-active');
 };
 
 // Auto-play Next upon completion
