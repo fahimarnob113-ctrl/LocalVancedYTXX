@@ -402,6 +402,82 @@ body {
   background: var(--accent);
 }
 
+/* Skeleton Shimmer & Modern Placeholders */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.thumbnail-skeleton {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, var(--surface-elevated) 25%, var(--surface-hover) 50%, var(--surface-elevated) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s infinite ease-in-out;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.skeleton-icon {
+  font-size: 26px;
+  opacity: 0.35;
+  filter: grayscale(0.6);
+  animation: pulse 1.8s infinite ease-in-out;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.25; transform: scale(0.96); }
+  50% { opacity: 0.5; transform: scale(1.04); }
+}
+
+/* Category Tagging Chips & Pills */
+.tag-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: var(--surface-active);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid var(--divider);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tag-badge:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+.card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.btn-add-tag {
+  background: transparent;
+  border: 1px dashed var(--on-surface-subtle);
+  color: var(--on-surface-muted);
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-add-tag:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .card-info {
   display: flex;
   gap: 10px;

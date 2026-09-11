@@ -12,6 +12,8 @@ const state = {
   favorites: new Set(),
   playlists: {},
   notes: {},
+  tags: {},
+  activeTag: null,
   theme: 'dark',
   debugLogs: [],
   browserFiles: new Map()
@@ -281,7 +283,7 @@ function updateCardThumbnail(id, url) {
     img.src = url;
     img.style.display = 'block';
   });
-  document.querySelectorAll(`.card-placeholder-${id}`).forEach(ph => {
+  document.querySelectorAll(`.card-skeleton-${id}, .card-placeholder-${id}`).forEach(ph => {
     ph.style.display = 'none';
   });
 }
@@ -378,6 +380,7 @@ async function loadStateFromDisk() {
       state.favorites = new Set(data.favorites || []);
       state.playlists = data.playlists || {};
       state.notes = data.notes || {};
+      state.tags = data.tags || {};
       state.theme = data.theme || 'dark';
       document.documentElement.setAttribute('data-theme', state.theme);
 
@@ -433,6 +436,7 @@ async function saveStateToDisk() {
     favorites: Array.from(state.favorites),
     playlists: state.playlists,
     notes: state.notes,
+    tags: state.tags,
     theme: state.theme
   };
   try {
@@ -652,10 +656,25 @@ document.getElementById('btnAddFiles')?.addEventListener('click', () => {
 function getFilteredAndSortedMedia() {
   let list = [...state.media];
 
-  // Search filter
+  // Search filter (Matches title, folder, or #tags)
   if (state.searchQuery.trim()) {
-    const q = state.searchQuery.toLowerCase();
-    list = list.filter(m => m.title.toLowerCase().includes(q) || m.folderName.toLowerCase().includes(q));
+    const q = state.searchQuery.toLowerCase().trim();
+    const cleanQ = q.replace(/^#/, '');
+    list = list.filter(m => {
+      const matchTitle = m.title.toLowerCase().includes(q);
+      const matchFolder = m.folderName.toLowerCase().includes(q);
+      const mediaTags = state.tags[m.id] || [];
+      const matchTag = mediaTags.some(t => t.toLowerCase().includes(cleanQ));
+      return matchTitle || matchFolder || matchTag;
+    });
+  }
+
+  // Category Tag filter (via dynamic chips or tag clicking)
+  if (state.activeTag) {
+    list = list.filter(m => {
+      const mediaTags = state.tags[m.id] || [];
+      return mediaTags.includes(state.activeTag);
+    });
   }
 
   // Channel filter
@@ -705,7 +724,59 @@ function getFilteredAndSortedMedia() {
 // Rendering UI
 function renderAll() {
   renderSidebarChannels();
+  renderFilterChips();
   renderFeed();
+}
+
+function renderFilterChips() {
+  const container = document.getElementById('filterChips');
+  if (!container) return;
+
+  const allTags = new Set();
+  Object.values(state.tags).forEach(tagsArr => {
+    if (Array.isArray(tagsArr)) {
+      tagsArr.forEach(t => allTags.add(t));
+    }
+  });
+
+  const baseChips = [
+    { filter: 'all', label: 'All' },
+    { filter: 'video', label: 'Videos' },
+    { filter: 'audio', label: 'Audio' },
+    { filter: 'resume', label: 'Continue Watching' },
+    { filter: 'unwatched', label: 'Unwatched' },
+    { filter: 'short', label: '< 5 mins' },
+    { filter: 'medium', label: '5 - 20 mins' },
+    { filter: 'long', label: '> 20 mins' }
+  ];
+
+  let html = '';
+  baseChips.forEach(c => {
+    const isActive = !state.activeTag && state.activeFilter === c.filter;
+    html += `<div class="chip ${isActive ? 'active' : ''}" data-filter="${c.filter}">${c.label}</div>`;
+  });
+
+  Array.from(allTags).sort().forEach(tag => {
+    const isActive = state.activeTag === tag;
+    html += `<div class="chip ${isActive ? 'active' : ''}" data-tag="${tag}">🏷️ #${tag}</div>`;
+  });
+
+  container.innerHTML = html;
+
+  container.querySelectorAll('.chip').forEach(chip => {
+    chip.onclick = () => {
+      if (chip.dataset.tag) {
+        const clickedTag = chip.dataset.tag;
+        state.activeTag = (state.activeTag === clickedTag) ? null : clickedTag;
+        state.activeFilter = 'all';
+      } else {
+        state.activeTag = null;
+        state.activeFilter = chip.dataset.filter || 'all';
+      }
+      renderFilterChips();
+      renderFeed();
+    };
+  });
 }
 
 function renderSidebarChannels() {
@@ -1181,8 +1252,8 @@ function createVideoCard(item, isShelf) {
   card.innerHTML = `
     <div class="thumbnail-wrap">
       <img class="thumbnail-img card-thumb-${item.id}" src="${thumbSrc}" style="${thumbSrc ? '' : 'display:none;'}" alt="">
-      <div class="card-placeholder-${item.id}" style="${thumbSrc ? 'display:none;' : 'display:flex;'} width:100%; height:100%; align-items:center; justify-content:center; background:#1e2024; color:var(--on-surface-muted); font-size:24px;">
-        ${item.type === 'audio' ? '🎵' : '🎬'}
+      <div class="thumbnail-skeleton card-skeleton-${item.id}" style="${thumbSrc ? 'display:none;' : 'display:flex;'}">
+        <span class="skeleton-icon">${item.type === 'audio' ? '🎵' : '🎬'}</span>
       </div>
       <span class="duration-pill card-dur-${item.id}">${formatDuration(item.durationSec)}</span>
       ${progressPct > 0 ? `<div class="resume-bar" style="width:${progressPct}%"></div>` : ''}
@@ -1194,17 +1265,89 @@ function createVideoCard(item, isShelf) {
         <div class="card-meta">
           <span>${item.folderName}</span> • <span>${formatBytes(item.sizeBytes)}</span>
         </div>
+        <div class="card-tags" id="cardTags-${item.id}">
+          ${(state.tags[item.id] || []).map(t => `<span class="tag-badge" data-tag="${t}">#${t}</span>`).join('')}
+          <button class="btn-add-tag" title="Add category tag">+ Tag</button>
+        </div>
       </div>
     </div>
   `;
 
   card.onclick = () => openWatchPage(item);
 
+  card.querySelectorAll('.tag-badge').forEach(badge => {
+    badge.onclick = (e) => {
+      e.stopPropagation();
+      const tag = badge.dataset.tag;
+      state.activeTag = (state.activeTag === tag) ? null : tag;
+      state.activeFilter = 'all';
+      renderFilterChips();
+      renderFeed();
+    };
+  });
+
+  const btnAdd = card.querySelector('.btn-add-tag');
+  if (btnAdd) {
+    btnAdd.onclick = (e) => {
+      e.stopPropagation();
+      promptCategoryTag(item.id);
+    };
+  }
+
   if (!item.thumbnailUrl || !item.durationSec) {
     lazyThumbObserver.observe(card);
   }
 
   return card;
+}
+
+// Category Tag Management Engine
+function promptCategoryTag(mediaId) {
+  const item = state.media.find(m => m.id === mediaId);
+  if (!item) return;
+  const currentTags = state.tags[mediaId] || [];
+  const input = prompt(
+    `Manage Category Tags for:\n"${item.title}"\n\nEnter comma-separated tags (e.g. Tutorial, Music, Gaming, Lecture):`,
+    currentTags.join(', ')
+  );
+  if (input === null) return;
+  const newTags = input.split(',')
+    .map(t => t.trim().replace(/^#/, '').toLowerCase())
+    .filter(t => t.length > 0);
+
+  if (newTags.length === 0) {
+    delete state.tags[mediaId];
+  } else {
+    state.tags[mediaId] = Array.from(new Set(newTags));
+  }
+  saveStateToDisk();
+  renderFilterChips();
+  renderFeed();
+  renderWatchTags(mediaId);
+  showToast(`Updated tags for "${item.title}"`, 'success');
+}
+
+function renderWatchTags(mediaId) {
+  const container = document.getElementById('watchTags');
+  if (!container) return;
+  const tags = state.tags[mediaId] || [];
+  container.innerHTML = tags.map(t => `<span class="tag-badge" data-tag="${t}">#${t}</span>`).join('') +
+    `<button class="btn-add-tag" id="btnAddWatchTag" style="margin-left:4px;">+ Tag</button>`;
+
+  container.querySelectorAll('.tag-badge').forEach(badge => {
+    badge.onclick = () => {
+      const tag = badge.dataset.tag;
+      state.activeTag = tag;
+      state.activeFilter = 'all';
+      closeWatchPage(true);
+      renderAll();
+    };
+  });
+
+  const btnAdd = container.querySelector('#btnAddWatchTag');
+  if (btnAdd) {
+    btnAdd.onclick = () => promptCategoryTag(mediaId);
+  }
 }
 
 // Watch Overlay & Playback Engine
@@ -1221,6 +1364,12 @@ async function openWatchPage(item) {
   document.getElementById('watchTitle').textContent = item.title;
   document.getElementById('watchMeta').textContent = `${item.folderName} • ${formatBytes(item.sizeBytes)} • ${item.ext.toUpperCase()}`;
   document.getElementById('btnFavorite').textContent = state.favorites.has(item.id) ? '⭐ Favorited' : '☆ Favorite';
+  renderWatchTags(item.id);
+
+  const btnManageTags = document.getElementById('btnManageWatchTags');
+  if (btnManageTags) {
+    btnManageTags.onclick = () => promptCategoryTag(item.id);
+  }
 
   // Resolve valid video URL from memory or IndexedDB
   if (state.browserFiles.has(item.id)) {

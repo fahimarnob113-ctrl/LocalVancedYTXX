@@ -149,10 +149,12 @@
             <div>
               <h1 id="watchTitle" style="font-size:18px; font-weight:700;">Video Title</h1>
               <div id="watchMeta" style="color:var(--on-surface-muted); font-size:13px; margin-top:4px;">Channel • File size • Duration</div>
+              <div id="watchTags" class="card-tags" style="margin-top:6px;"></div>
             </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
               <input type="file" id="subtitleFileInput" accept=".srt,.vtt" style="display:none;">
               <button class="btn" id="btnLoadSubtitles" title="Load .srt or .vtt subtitle file">💬 Subtitles</button>
+              <button class="btn" id="btnManageWatchTags" title="Manage category tags">🏷️ Tags</button>
               <button class="btn" id="btnFavorite">⭐ Favorite</button>
               <button class="btn" id="btnAddToPlaylist">➕ Add to Playlist</button>
               <button class="btn" id="btnRevealFile">📂 Open Folder</button>
