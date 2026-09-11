@@ -33,22 +33,11 @@
 
 ## 🌟 Why LocalVancedYT?
 
-Traditional desktop media players (like VLC or Windows Media Player) play files well, but their interfaces feel stuck in 2005—bland grey menus, clunky playlist sidebars, and zero library visual appeal. Meanwhile, online streaming services push intrusive ads, algorithmic doomscrolling, buffering, and paywalls.
+> **The YouTube and Spotify interface you love—engineered exclusively for your offline local drive.**
 
-**LocalVancedYT bridges the gap.** It delivers the sleek, fluid, modern experience of **YouTube + Vanced + Spotify** directly to your local video and audio collection:
-
-| Feature | Traditional Players (VLC, etc.) | Online YouTube | 🚀 **LocalVancedYT** |
-|---|:---:|:---:|:---:|
-| **Modern Visual Library** | ❌ Boring file trees | ✅ Feed with thumbnails | ✅ **Rich 60fps card feed & shelves** |
-| **Ads & Sponsors** | ✅ None | ❌ Constantly interrupted | ✅ **100% Ad-Free Forever** |
-| **Offline Privacy** | ✅ Offline | ❌ Tracked & logged | ✅ **Zero Telemetry / 0 Network Calls** |
-| **Buffering / Speed** | ✅ Instant | ❌ Internet dependent | ✅ **Blazing NVMe / SSD / HDD Speed** |
-| **Dock Player (Spotify style)** | ❌ Clunky minimize | ❌ Mobile PiP paywalled | ✅ **Integrated 76px acrylic dock player** |
-| **Isolated 4-Tab Queue** | ❌ Plain text list | ❌ Algorithmic suggestions | ✅ **Strict same-folder, playlist & queue** |
-| **Timestamped Study Notes** | ❌ None | ❌ Public comments | ✅ **One-click bookmarking + TXT export** |
-| **Storage Cleanup Manager** | ❌ Manual Windows Explorer | ❌ N/A | ✅ **Safe Recycle Bin culling & calculator** |
-
-> **Bottom line:** Your personal media library deserves a streaming-grade experience. No internet required, no sign-ups, no tracking—just pure, high-performance offline playback.
+* ⚡ **Pure Speed & Zero Buffering** — Direct local disk streaming with zero loading screens, smooth 60fps GPU acceleration, and instant scrubbing.
+* 🚫 **Zero Ads, Zero Tracking, Zero BS** — No sponsorships, no algorithmic rabbit holes, no logins, and strictly zero telemetry or internet calls.
+* 🎛️ **Streaming-Grade Power Without The Bloat** — Rich visual feeds, a Spotify-style persistent dock player, 4-tab isolated queues, and timestamped study notes—leaving dated 2000s-era media players in the dust.
 
 ---
 
