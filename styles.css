@@ -135,6 +135,15 @@ body {
   box-shadow: 0 2px 8px var(--accent-glow);
 }
 
+.logo-icon-img {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  object-fit: cover;
+  box-shadow: 0 2px 8px var(--accent-glow);
+  display: block;
+}
+
 .logo-text {
   font-size: 17px;
   font-weight: 700;
