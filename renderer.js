@@ -14,6 +14,10 @@ const state = {
   notes: {},
   tags: {},
   activeTag: null,
+  manualQueue: [],
+  activeWatchTab: 'folder',
+  activePlaylistForQueue: null,
+  activeNoteTag: null,
   theme: 'dark',
   debugLogs: [],
   browserFiles: new Map()
@@ -1268,6 +1272,7 @@ function createVideoCard(item, isShelf) {
         <div class="card-tags" id="cardTags-${item.id}">
           ${(state.tags[item.id] || []).map(t => `<span class="tag-badge" data-tag="${t}">#${t}</span>`).join('')}
           <button class="btn-add-tag" title="Add category tag">+ Tag</button>
+          <button class="btn-add-tag btn-queue-card" title="Add to playback queue" style="color:var(--accent); border-color:var(--accent);">+ Queue</button>
         </div>
       </div>
     </div>
@@ -1291,6 +1296,14 @@ function createVideoCard(item, isShelf) {
     btnAdd.onclick = (e) => {
       e.stopPropagation();
       promptCategoryTag(item.id);
+    };
+  }
+
+  const btnQueue = card.querySelector('.btn-queue-card');
+  if (btnQueue) {
+    btnQueue.onclick = (e) => {
+      e.stopPropagation();
+      addToManualQueue(item);
     };
   }
 
@@ -1398,7 +1411,7 @@ async function openWatchPage(item) {
   videoPlayer.play().catch(e => console.log('Autoplay deferred:', e));
 
   renderNotes(item.id);
-  renderUpNext(item);
+  renderWatchTabs(item);
 
   // Position Auto-Saver every 3 seconds
   if (saveInterval) clearInterval(saveInterval);
@@ -1465,36 +1478,385 @@ window.deleteNote = function(mediaId, idx) {
   renderNotes(mediaId);
 };
 
-function renderUpNext(currentItem) {
+// --- Watch Page 4-Tab Sidebar Engine ---
+
+function addToManualQueue(item, playNext = false) {
+  if (playNext) {
+    state.manualQueue.unshift(item);
+    showToast(`Queued "${item.title}" to play next!`, 'success');
+  } else {
+    state.manualQueue.push(item);
+    showToast(`Added "${item.title}" to queue!`, 'success');
+  }
+  updateQueueBadge();
+  if (state.activeWatchTab === 'manual') {
+    renderManualQueue();
+  }
+}
+
+function updateQueueBadge() {
+  const badge = document.getElementById('badgeQueueCount');
+  if (!badge) return;
+  if (state.manualQueue.length > 0) {
+    badge.textContent = state.manualQueue.length;
+    badge.style.display = 'inline-block';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function renderWatchTabs(currentItem) {
+  updateQueueBadge();
+  const tabsHeader = document.getElementById('watchTabsHeader');
+  if (tabsHeader) {
+    tabsHeader.querySelectorAll('.watch-tab-btn').forEach(btn => {
+      btn.onclick = () => {
+        tabsHeader.querySelectorAll('.watch-tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.activeWatchTab = btn.dataset.tab;
+        
+        document.getElementById('tabContentFolder').style.display = (state.activeWatchTab === 'folder') ? 'flex' : 'none';
+        document.getElementById('tabContentPlaylist').style.display = (state.activeWatchTab === 'playlist') ? 'flex' : 'none';
+        document.getElementById('tabContentManual').style.display = (state.activeWatchTab === 'manual') ? 'flex' : 'none';
+        document.getElementById('tabContentNotes').style.display = (state.activeWatchTab === 'notes') ? 'flex' : 'none';
+        
+        renderActiveWatchTab(currentItem);
+      };
+    });
+  }
+
+  // Ensure active tab view is displayed correctly
+  document.getElementById('tabContentFolder').style.display = (state.activeWatchTab === 'folder') ? 'flex' : 'none';
+  document.getElementById('tabContentPlaylist').style.display = (state.activeWatchTab === 'playlist') ? 'flex' : 'none';
+  document.getElementById('tabContentManual').style.display = (state.activeWatchTab === 'manual') ? 'flex' : 'none';
+  document.getElementById('tabContentNotes').style.display = (state.activeWatchTab === 'notes') ? 'flex' : 'none';
+
+  renderActiveWatchTab(currentItem);
+}
+
+function renderActiveWatchTab(currentItem) {
+  if (state.activeWatchTab === 'folder') {
+    renderFolderQueue(currentItem);
+  } else if (state.activeWatchTab === 'playlist') {
+    renderPlaylistQueue(currentItem);
+  } else if (state.activeWatchTab === 'manual') {
+    renderManualQueue();
+  } else if (state.activeWatchTab === 'notes') {
+    renderSideNotes(currentItem.id);
+  }
+}
+
+// Tab 1: Same Folder Queue
+function renderFolderQueue(currentItem) {
   const container = document.getElementById('upNextList');
+  if (!container) return;
   container.innerHTML = '';
-  // Strictly filter items from the exact same directory/folder
-  const related = state.media.filter(m => m.id !== currentItem.id && m.folderPath === currentItem.folderPath);
+
+  const related = state.media.filter(m => m.folderPath === currentItem.folderPath);
+  const titleEl = document.getElementById('folderQueueTitle');
+  const countEl = document.getElementById('folderQueueCount');
+  if (titleEl) titleEl.textContent = currentItem.folderName || 'Current Folder';
+  if (countEl) countEl.textContent = `${related.length} videos`;
 
   if (related.length === 0) {
-    container.innerHTML = `<span style="color:var(--on-surface-muted); font-size:13px;">No other media in this folder (${currentItem.folderName}).</span>`;
+    container.innerHTML = `<span style="color:var(--on-surface-muted); font-size:13px;">No other media in this folder.</span>`;
     return;
   }
 
-  related.slice(0, 10).forEach(item => {
+  related.forEach(item => {
+    const isCurrent = item.id === currentItem.id;
     const row = document.createElement('div');
-    row.style.display = 'flex';
-    row.style.gap = '10px';
-    row.style.cursor = 'pointer';
+    row.className = `queue-item-row ${isCurrent ? 'active' : ''}`;
     row.innerHTML = `
-      <div style="width:120px; aspect-ratio:16/9; background:#000; border-radius:6px; overflow:hidden; position:relative; flex-shrink:0;">
+      <div style="width:110px; aspect-ratio:16/9; background:#000; border-radius:6px; overflow:hidden; position:relative; flex-shrink:0;">
         <img src="${item.thumbnailUrl || ''}" class="card-thumb-${item.id}" style="${item.thumbnailUrl ? '' : 'display:none;'} width:100%; height:100%; object-fit:cover;">
         <span class="duration-pill card-dur-${item.id}">${formatDuration(item.durationSec)}</span>
+        ${isCurrent ? `<div style="position:absolute; top:4px; left:4px; background:var(--accent); color:#fff; font-size:9px; font-weight:700; padding:1px 4px; border-radius:3px;">PLAYING</div>` : ''}
       </div>
-      <div style="display:flex; flex-direction:column; gap:2px; overflow:hidden;">
-        <div style="font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;">${item.title}</div>
+      <div style="display:flex; flex-direction:column; gap:2px; overflow:hidden; flex:1;">
+        <div style="font-size:12.5px; font-weight:600; color:${isCurrent ? 'var(--accent)' : 'var(--on-surface)'}; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;">${item.title}</div>
         <div style="font-size:11px; color:var(--on-surface-muted);">${formatBytes(item.sizeBytes)}</div>
       </div>
+      <button class="btn btn-add-tag" title="Add to queue" style="font-size:10px; padding:2px 6px;">+ Queue</button>
     `;
-    row.onclick = () => openWatchPage(item);
+
+    row.onclick = (e) => {
+      if (e.target.tagName === 'BUTTON') return;
+      openWatchPage(item);
+    };
+
+    row.querySelector('button')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      addToManualQueue(item);
+    });
+
     container.appendChild(row);
   });
 }
+
+// Tab 2: Playlist Queue
+function renderPlaylistQueue(currentItem) {
+  const container = document.getElementById('playlistQueueList');
+  const dropdown = document.getElementById('playlistSelectDropdown');
+  if (!container || !dropdown) return;
+
+  const playlistNames = Object.keys(state.playlists);
+  if (playlistNames.length === 0) {
+    dropdown.innerHTML = `<option value="">No playlists created</option>`;
+    container.innerHTML = `<div style="padding:24px; text-align:center; color:var(--on-surface-muted); font-size:13px;">You have not created any playlists yet.<br><br><button class="btn btn-accent" style="font-size:11px;" onclick="document.getElementById('btnAddToPlaylist').click()">+ Create or Add Playlist</button></div>`;
+    return;
+  }
+
+  if (!state.activePlaylistForQueue || !state.playlists[state.activePlaylistForQueue]) {
+    state.activePlaylistForQueue = playlistNames[0];
+  }
+
+  dropdown.innerHTML = playlistNames.map(name => `
+    <option value="${name}" ${state.activePlaylistForQueue === name ? 'selected' : ''}>${name} (${state.playlists[name].length} tracks)</option>
+  `).join('');
+
+  dropdown.onchange = (e) => {
+    state.activePlaylistForQueue = e.target.value;
+    state.activePlaylistName = e.target.value;
+    renderPlaylistQueue(currentItem);
+  };
+
+  const plItems = state.playlists[state.activePlaylistForQueue] || [];
+  container.innerHTML = '';
+
+  if (plItems.length === 0) {
+    container.innerHTML = `<div style="padding:20px; text-align:center; color:var(--on-surface-muted); font-size:13px;">This playlist is empty.</div>`;
+    return;
+  }
+
+  plItems.forEach((mediaId, idx) => {
+    const item = state.media.find(m => m.id === mediaId);
+    if (!item) return;
+
+    const isCurrent = currentItem && item.id === currentItem.id;
+    const row = document.createElement('div');
+    row.className = `queue-item-row ${isCurrent ? 'active' : ''}`;
+    row.innerHTML = `
+      <span style="font-size:12px; font-weight:700; color:var(--on-surface-muted); width:18px; text-align:center;">#${idx + 1}</span>
+      <div style="width:90px; aspect-ratio:16/9; background:#000; border-radius:6px; overflow:hidden; position:relative; flex-shrink:0;">
+        <img src="${item.thumbnailUrl || ''}" class="card-thumb-${item.id}" style="${item.thumbnailUrl ? '' : 'display:none;'} width:100%; height:100%; object-fit:cover;">
+        <span class="duration-pill card-dur-${item.id}">${formatDuration(item.durationSec)}</span>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:2px; overflow:hidden; flex:1;">
+        <div style="font-size:12.5px; font-weight:600; color:${isCurrent ? 'var(--accent)' : 'var(--on-surface)'}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${item.title}</div>
+        <div style="font-size:11px; color:var(--on-surface-muted);">${item.folderName}</div>
+      </div>
+      <button class="btn" title="Remove from playlist" style="padding:2px 6px; font-size:11px; color:var(--danger);">✕</button>
+    `;
+
+    row.onclick = (e) => {
+      if (e.target.tagName === 'BUTTON') return;
+      state.activePlaylistName = state.activePlaylistForQueue;
+      openWatchPage(item);
+    };
+
+    row.querySelector('button').onclick = (e) => {
+      e.stopPropagation();
+      state.playlists[state.activePlaylistForQueue].splice(idx, 1);
+      saveStateToDisk();
+      renderPlaylistQueue(currentItem);
+      showToast(`Removed from "${state.activePlaylistForQueue}"`, 'info');
+    };
+
+    container.appendChild(row);
+  });
+}
+
+// Tab 3: Manual Queue
+function renderManualQueue() {
+  const container = document.getElementById('manualQueueList');
+  if (!container) return;
+  container.innerHTML = '';
+
+  updateQueueBadge();
+
+  if (state.manualQueue.length === 0) {
+    container.innerHTML = `
+      <div style="padding:32px 16px; text-align:center; color:var(--on-surface-muted); font-size:13px;">
+        <div style="font-size:28px; margin-bottom:6px;">⏳</div>
+        <div>Your playback queue is empty.</div>
+        <div style="font-size:11.5px; margin-top:4px; opacity:0.8;">Click <strong>+ Queue</strong> on any video to line up your watch session.</div>
+      </div>
+    `;
+    return;
+  }
+
+  state.manualQueue.forEach((item, idx) => {
+    const row = document.createElement('div');
+    row.className = 'queue-item-row';
+    row.innerHTML = `
+      <span style="font-size:12px; font-weight:700; color:var(--on-surface-muted); width:18px; text-align:center;">${idx + 1}</span>
+      <div style="width:90px; aspect-ratio:16/9; background:#000; border-radius:6px; overflow:hidden; position:relative; flex-shrink:0;">
+        <img src="${item.thumbnailUrl || ''}" class="card-thumb-${item.id}" style="${item.thumbnailUrl ? '' : 'display:none;'} width:100%; height:100%; object-fit:cover;">
+        <span class="duration-pill card-dur-${item.id}">${formatDuration(item.durationSec)}</span>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:2px; overflow:hidden; flex:1;">
+        <div style="font-size:12.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${item.title}</div>
+        <div style="font-size:11px; color:var(--on-surface-muted);">${item.folderName}</div>
+      </div>
+      <div style="display:flex; gap:2px;">
+        <button class="btn btn-up" title="Move Up" style="padding:2px 5px; font-size:10px;" ${idx === 0 ? 'disabled' : ''}>▲</button>
+        <button class="btn btn-down" title="Move Down" style="padding:2px 5px; font-size:10px;" ${idx === state.manualQueue.length - 1 ? 'disabled' : ''}>▼</button>
+        <button class="btn btn-del" title="Remove" style="padding:2px 5px; font-size:10px; color:var(--danger);">✕</button>
+      </div>
+    `;
+
+    row.onclick = (e) => {
+      if (e.target.tagName === 'BUTTON') return;
+      state.manualQueue.splice(idx, 1);
+      updateQueueBadge();
+      openWatchPage(item);
+    };
+
+    row.querySelector('.btn-up')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (idx > 0) {
+        const temp = state.manualQueue[idx];
+        state.manualQueue[idx] = state.manualQueue[idx - 1];
+        state.manualQueue[idx - 1] = temp;
+        renderManualQueue();
+      }
+    });
+
+    row.querySelector('.btn-down')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (idx < state.manualQueue.length - 1) {
+        const temp = state.manualQueue[idx];
+        state.manualQueue[idx] = state.manualQueue[idx + 1];
+        state.manualQueue[idx + 1] = temp;
+        renderManualQueue();
+      }
+    });
+
+    row.querySelector('.btn-del')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.manualQueue.splice(idx, 1);
+      renderManualQueue();
+      showToast('Removed from queue.', 'info');
+    });
+
+    container.appendChild(row);
+  });
+}
+
+document.getElementById('btnClearManualQueue')?.addEventListener('click', () => {
+  if (state.manualQueue.length === 0) return;
+  state.manualQueue = [];
+  renderManualQueue();
+  showToast('Queue cleared.', 'info');
+});
+
+// Tab 4: Tagged Notes & Bookmarks
+function renderSideNotes(mediaId) {
+  const container = document.getElementById('notesListSide');
+  const tagFiltersEl = document.getElementById('notesTagFilters');
+  if (!container) return;
+
+  const notes = state.notes[mediaId] || [];
+
+  // Extract all hashtags from notes
+  const hashtags = new Set();
+  notes.forEach(n => {
+    const matches = n.text.match(/#[a-zA-Z0-9_-]+/g);
+    if (matches) {
+      matches.forEach(tag => hashtags.add(tag.toLowerCase()));
+    }
+  });
+
+  // Render hashtag filter chips
+  if (tagFiltersEl) {
+    if (hashtags.size > 0) {
+      tagFiltersEl.innerHTML = Array.from(hashtags).map(tag => `
+        <span class="tag-badge ${state.activeNoteTag === tag ? 'active' : ''}" data-tag="${tag}">${tag}</span>
+      `).join('') + (state.activeNoteTag ? `<span class="tag-badge" id="btnClearNoteTag" style="color:var(--danger);">✕ Clear</span>` : '');
+
+      tagFiltersEl.querySelectorAll('.tag-badge').forEach(badge => {
+        badge.onclick = () => {
+          if (badge.id === 'btnClearNoteTag') {
+            state.activeNoteTag = null;
+          } else {
+            const tag = badge.dataset.tag;
+            state.activeNoteTag = (state.activeNoteTag === tag) ? null : tag;
+          }
+          renderSideNotes(mediaId);
+        };
+      });
+    } else {
+      tagFiltersEl.innerHTML = '';
+    }
+  }
+
+  let displayedNotes = notes;
+  if (state.activeNoteTag) {
+    displayedNotes = notes.filter(n => n.text.toLowerCase().includes(state.activeNoteTag));
+  }
+
+  container.innerHTML = '';
+
+  if (displayedNotes.length === 0) {
+    container.innerHTML = `
+      <div style="padding:24px; text-align:center; color:var(--on-surface-muted); font-size:12.5px;">
+        No timestamped notes yet.<br>Click <strong>+ Note</strong> to save a thought or key moment!
+      </div>
+    `;
+    return;
+  }
+
+  displayedNotes.forEach((n, idx) => {
+    const originalIdx = notes.indexOf(n);
+    const row = document.createElement('div');
+    row.style.cssText = 'background:var(--surface-elevated); border:1px solid var(--divider); border-radius:6px; padding:8px 10px; display:flex; flex-direction:column; gap:4px;';
+    
+    const highlightedText = n.text.replace(/(#[a-zA-Z0-9_-]+)/g, '<span style="color:var(--accent); font-weight:600;">$1</span>');
+
+    row.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <button class="btn" style="padding:1px 6px; font-size:11px; font-family:monospace; color:var(--accent);">${formatDuration(n.timeSec)}</button>
+        <button class="btn" title="Delete note" style="padding:1px 5px; font-size:10px; color:var(--danger);">✕</button>
+      </div>
+      <div style="font-size:12.5px; line-height:1.4; word-break:break-word;">${highlightedText}</div>
+    `;
+
+    row.querySelector('button').onclick = () => {
+      videoPlayer.currentTime = n.timeSec;
+    };
+
+    row.querySelector('button[title="Delete note"]').onclick = () => {
+      state.notes[mediaId].splice(originalIdx, 1);
+      saveStateToDisk();
+      renderSideNotes(mediaId);
+      renderNotes(mediaId);
+      showToast('Note deleted.', 'info');
+    };
+
+    container.appendChild(row);
+  });
+}
+
+document.getElementById('btnAddNoteSide')?.addEventListener('click', () => {
+  if (!state.currentMedia) return;
+  const text = prompt('Enter note / bookmark (you can use #tags like #important or #summary):');
+  if (!text || !text.trim()) return;
+  if (!state.notes[state.currentMedia.id]) state.notes[state.currentMedia.id] = [];
+  state.notes[state.currentMedia.id].push({
+    timeSec: Math.floor(videoPlayer.currentTime),
+    text: text.trim(),
+    createdAt: Date.now()
+  });
+  saveStateToDisk();
+  renderSideNotes(state.currentMedia.id);
+  renderNotes(state.currentMedia.id);
+  showToast('Note added!', 'success');
+});
+
+document.getElementById('btnExportNotesSide')?.addEventListener('click', () => {
+  document.getElementById('btnExportNotes')?.click();
+});
 
 // Event Listeners Wiring
 document.getElementById('btnAddFolder').onclick = handleAddFolder;
@@ -1782,28 +2144,65 @@ progressWrap.onmouseleave = () => {
   scrubTooltip.style.display = 'none';
 };
 
-// Previous & Next Video in Same Folder
-ctrlPrev.onclick = () => {
+// Previous & Next Video Navigation (Manual Queue -> Playlist -> Folder)
+function playPreviousVideo() {
   if (!state.currentMedia) return;
+  if (state.activePlaylistName && state.playlists[state.activePlaylistName]) {
+    const pl = state.playlists[state.activePlaylistName];
+    const curIdx = pl.indexOf(state.currentMedia.id);
+    if (curIdx > 0) {
+      const prevMedia = state.media.find(m => m.id === pl[curIdx - 1]);
+      if (prevMedia) {
+        openWatchPage(prevMedia);
+        return;
+      }
+    }
+  }
   const sameFolder = state.media.filter(m => m.folderPath === state.currentMedia.folderPath);
   const curIdx = sameFolder.findIndex(m => m.id === state.currentMedia.id);
   if (curIdx > 0) {
     openWatchPage(sameFolder[curIdx - 1]);
   } else {
-    showToast('Already at the first video in this folder.', 'info');
+    showToast('Already at the first video.', 'info');
   }
-};
+}
 
-ctrlNext.onclick = () => {
+function playNextVideo() {
+  // 1. Manual Queue has highest priority
+  if (state.manualQueue.length > 0) {
+    const nextItem = state.manualQueue.shift();
+    updateQueueBadge();
+    renderManualQueue();
+    openWatchPage(nextItem);
+    return;
+  }
+
+  // 2. Active Playlist
+  if (state.activePlaylistName && state.playlists[state.activePlaylistName]) {
+    const pl = state.playlists[state.activePlaylistName];
+    const curIdx = pl.indexOf(state.currentMedia?.id);
+    if (curIdx !== -1 && curIdx + 1 < pl.length) {
+      const nextMedia = state.media.find(m => m.id === pl[curIdx + 1]);
+      if (nextMedia) {
+        openWatchPage(nextMedia);
+        return;
+      }
+    }
+  }
+
+  // 3. Fallback to same folder
   if (!state.currentMedia) return;
   const sameFolder = state.media.filter(m => m.folderPath === state.currentMedia.folderPath);
   const curIdx = sameFolder.findIndex(m => m.id === state.currentMedia.id);
   if (curIdx !== -1 && curIdx + 1 < sameFolder.length) {
     openWatchPage(sameFolder[curIdx + 1]);
   } else {
-    showToast('Reached the end of this folder.', 'info');
+    showToast('Reached the end of the folder/queue.', 'info');
   }
-};
+}
+
+ctrlPrev.onclick = playPreviousVideo;
+ctrlNext.onclick = playNextVideo;
 
 // ±10s Skip
 ctrlRewind.onclick = () => {
@@ -1898,15 +2297,8 @@ document.getElementById('miniPlayerDock').onclick = () => {
   if (state.currentMedia) openWatchPage(state.currentMedia);
 };
 
-// Auto-play Next in Same Folder upon completion
-videoPlayer.onended = () => {
-  if (!state.currentMedia) return;
-  const sameFolder = state.media.filter(m => m.folderPath === state.currentMedia.folderPath);
-  const curIdx = sameFolder.findIndex(m => m.id === state.currentMedia.id);
-  if (curIdx !== -1 && curIdx + 1 < sameFolder.length) {
-    openWatchPage(sameFolder[curIdx + 1]);
-  }
-};
+// Auto-play Next upon completion
+videoPlayer.onended = playNextVideo;
 
 // YouTube-Style Global Keyboard Shortcuts
 window.addEventListener('keydown', (e) => {
