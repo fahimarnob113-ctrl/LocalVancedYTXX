@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { pathToFileURL } = require('url');
+const crypto = require('crypto');
 
 const SUPPORTED_EXTENSIONS = new Set([
   '.mp4', '.mkv', '.webm', '.mov', '.avi', '.wmv', '.m4v',
@@ -67,18 +69,20 @@ async function scanDirectory(dir, rootDir) {
         if (SUPPORTED_EXTENSIONS.has(ext)) {
           try {
             const stats = await fs.promises.stat(fullPath);
-            const parentDir = path.basename(path.dirname(fullPath));
+            const relDir = path.relative(rootDir, path.dirname(fullPath));
+            const folderName = relDir ? relDir.replace(/\\/g, ' / ') : path.basename(rootDir);
             const isAudio = ['.mp3', '.wav', '.m4a', '.flac', '.aac', '.ogg'].includes(ext);
-            const fileId = Buffer.from(fullPath).toString('base64url');
+            const fileId = crypto.createHash('md5').update(fullPath).digest('hex');
             
             mediaList.push({
               id: fileId,
               title: path.basename(entry.name, ext),
               fileName: entry.name,
               filePath: fullPath,
-              fileUri: `file://${fullPath.replace(/\\/g, '/')}`,
+              fileUri: pathToFileURL(fullPath).href,
               folderPath: path.dirname(fullPath),
-              folderName: parentDir || 'Root',
+              folderName: folderName || 'Root',
+              rootFolder: path.basename(rootDir),
               sizeBytes: stats.size,
               mtime: stats.mtimeMs,
               addedAt: Date.now(),
@@ -131,9 +135,10 @@ ipcMain.handle('thumbnail:save', async (event, { id, dataUrl }) => {
     if (!dataUrl) return false;
     const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '');
     const buffer = Buffer.from(base64Data, 'base64');
-    const thumbPath = path.join(thumbnailCacheDir, `${id}.jpg`);
+    const safeId = crypto.createHash('md5').update(id).digest('hex');
+    const thumbPath = path.join(thumbnailCacheDir, `${safeId}.jpg`);
     await fs.promises.writeFile(thumbPath, buffer);
-    return `file://${thumbPath.replace(/\\/g, '/')}`;
+    return pathToFileURL(thumbPath).href;
   } catch (err) {
     console.error('Failed to save thumbnail:', err);
     return null;
@@ -141,9 +146,10 @@ ipcMain.handle('thumbnail:save', async (event, { id, dataUrl }) => {
 });
 
 ipcMain.handle('thumbnail:get', async (event, id) => {
-  const thumbPath = path.join(thumbnailCacheDir, `${id}.jpg`);
+  const safeId = crypto.createHash('md5').update(id).digest('hex');
+  const thumbPath = path.join(thumbnailCacheDir, `${safeId}.jpg`);
   if (fs.existsSync(thumbPath)) {
-    return `file://${thumbPath.replace(/\\/g, '/')}`;
+    return pathToFileURL(thumbPath).href;
   }
   return null;
 });

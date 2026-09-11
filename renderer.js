@@ -87,61 +87,132 @@ function formatBytes(bytes) {
 
 // Client-side Video Duration & Thumbnail Generator
 const thumbQueue = [];
-let isProcessingThumbs = false;
+let activeWorkers = 0;
+const MAX_CONCURRENT_WORKERS = 3;
 
 async function processThumbQueue() {
-  if (isProcessingThumbs || thumbQueue.length === 0) return;
-  isProcessingThumbs = true;
+  if (thumbQueue.length === 0 || activeWorkers >= MAX_CONCURRENT_WORKERS) return;
+  activeWorkers++;
 
   const item = thumbQueue.shift();
   try {
-    const cached = await window.api.getThumbnail(item.id);
+    let cached = null;
+    if (window.api && window.api.getThumbnail) {
+      try {
+        cached = await window.api.getThumbnail(item.id);
+      } catch (e) {
+        cached = null;
+      }
+    }
     if (cached) {
       item.thumbnailUrl = cached;
       updateCardThumbnail(item.id, cached);
+      if (!item.durationSec) {
+        await probeDuration(item);
+      }
     } else {
       const generated = await generateVideoThumbnail(item);
       if (generated && generated.thumb) {
-        const savedUrl = await window.api.saveThumbnail(item.id, generated.thumb);
-        item.thumbnailUrl = savedUrl || generated.thumb;
-        if (generated.duration) {
-          item.durationSec = generated.duration;
-          updateCardDuration(item.id, generated.duration);
+        let savedUrl = null;
+        if (window.api && window.api.saveThumbnail) {
+          try {
+            savedUrl = await window.api.saveThumbnail(item.id, generated.thumb);
+          } catch (e) {
+            savedUrl = null;
+          }
         }
+        item.thumbnailUrl = savedUrl || generated.thumb;
         updateCardThumbnail(item.id, item.thumbnailUrl);
         saveStateToDisk();
       }
     }
   } catch (err) {
     console.warn('Thumb generation error:', err);
+  } finally {
+    activeWorkers--;
+    if (thumbQueue.length > 0) {
+      setTimeout(processThumbQueue, 20);
+    }
   }
+}
 
-  isProcessingThumbs = false;
-  setTimeout(processThumbQueue, 40);
+function probeDuration(item) {
+  return new Promise((resolve) => {
+    const el = document.createElement(item.type === 'audio' ? 'audio' : 'video');
+    el.src = item.fileUri;
+    el.preload = 'metadata';
+    const timer = setTimeout(() => { el.remove(); resolve(); }, 3000);
+    el.onloadedmetadata = () => {
+      clearTimeout(timer);
+      if (el.duration && !isNaN(el.duration)) {
+        item.durationSec = el.duration;
+        updateCardDuration(item.id, el.duration);
+        saveStateToDisk();
+      }
+      el.remove();
+      resolve();
+    };
+    el.onerror = () => { clearTimeout(timer); el.remove(); resolve(); };
+  });
 }
 
 function generateVideoThumbnail(item) {
   return new Promise((resolve) => {
     if (item.type === 'audio') {
-      return resolve({ thumb: null, duration: 0 });
+      const audio = document.createElement('audio');
+      audio.src = item.fileUri;
+      audio.preload = 'metadata';
+      const audioTimeout = setTimeout(() => {
+        audio.remove();
+        resolve(null);
+      }, 3500);
+
+      audio.onloadedmetadata = () => {
+        clearTimeout(audioTimeout);
+        if (audio.duration && !isNaN(audio.duration)) {
+          item.durationSec = audio.duration;
+          updateCardDuration(item.id, audio.duration);
+          saveStateToDisk();
+        }
+        audio.remove();
+        resolve({ thumb: null, duration: audio.duration });
+      };
+
+      audio.onerror = () => {
+        clearTimeout(audioTimeout);
+        audio.remove();
+        resolve(null);
+      };
+      return;
     }
+
     const video = document.createElement('video');
     video.src = item.fileUri;
-    video.preload = 'metadata';
+    video.preload = 'auto';
     video.muted = true;
+    video.playsInline = true;
 
-    const timeout = setTimeout(() => {
-      video.remove();
-      resolve(null);
-    }, 4000);
-
-    video.onloadedmetadata = () => {
-      item.durationSec = video.duration;
-      video.currentTime = Math.min(Math.max(video.duration * 0.15, 1), 30);
+    let finished = false;
+    const cleanup = () => {
+      if (!finished) {
+        finished = true;
+        clearTimeout(timeout);
+        video.onloadedmetadata = null;
+        video.onseeked = null;
+        video.onerror = null;
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+        video.remove();
+      }
     };
 
-    video.onseeked = () => {
-      clearTimeout(timeout);
+    const timeout = setTimeout(() => {
+      cleanup();
+      resolve(null);
+    }, 4500);
+
+    const captureFrame = () => {
       try {
         const canvas = document.createElement('canvas');
         canvas.width = 360;
@@ -149,35 +220,56 @@ function generateVideoThumbnail(item) {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         const thumb = canvas.toDataURL('image/jpeg', 0.75);
-        video.remove();
-        resolve({ thumb, duration: video.duration });
+        const duration = video.duration || item.durationSec;
+        cleanup();
+        resolve({ thumb, duration });
       } catch (e) {
-        video.remove();
+        cleanup();
         resolve(null);
       }
     };
 
+    video.onloadedmetadata = () => {
+      if (video.duration && !isNaN(video.duration) && video.duration > 0) {
+        item.durationSec = video.duration;
+        updateCardDuration(item.id, video.duration);
+        saveStateToDisk();
+      }
+      const seekTarget = Math.min(1.0, (video.duration || 1) * 0.1);
+      if (video.currentTime !== seekTarget) {
+        video.currentTime = seekTarget;
+      } else {
+        captureFrame();
+      }
+    };
+
+    video.onseeked = () => {
+      captureFrame();
+    };
+
     video.onerror = () => {
-      clearTimeout(timeout);
-      video.remove();
+      cleanup();
       resolve(null);
     };
   });
 }
 
 function updateCardThumbnail(id, url) {
-  const img = document.querySelector(`.card-thumb-${id}`);
-  if (img && url) {
+  if (!url) return;
+  document.querySelectorAll(`.card-thumb-${id}`).forEach(img => {
     img.src = url;
     img.style.display = 'block';
-  }
+  });
+  document.querySelectorAll(`.card-placeholder-${id}`).forEach(ph => {
+    ph.style.display = 'none';
+  });
 }
 
 function updateCardDuration(id, duration) {
-  const pill = document.querySelector(`.card-dur-${id}`);
-  if (pill && duration) {
+  if (!duration) return;
+  document.querySelectorAll(`.card-dur-${id}`).forEach(pill => {
     pill.textContent = formatDuration(duration);
-  }
+  });
 }
 
 // IndexedDB Storage for Browser Mode (Persists File objects across reloads)
@@ -239,6 +331,15 @@ async function loadStateFromDisk() {
       state.theme = data.theme || 'dark';
       document.documentElement.setAttribute('data-theme', state.theme);
 
+      // Re-encode and fix any local file URIs in Electron
+      if (window.api && state.media.length > 0) {
+        state.media.forEach(m => {
+          if (m.filePath && (!m.fileUri || m.fileUri.startsWith('file://C:') || m.fileUri.includes(' '))) {
+            m.fileUri = 'file:///' + encodeURI(m.filePath.replace(/\\/g, '/')).replace(/#/g, '%23').replace(/\?/g, '%3F');
+          }
+        });
+      }
+
       // Re-hydrate browser blob URLs from IndexedDB
       if (!window.api && state.media.length > 0) {
         for (const m of state.media) {
@@ -280,11 +381,15 @@ async function saveStateToDisk() {
 
 function queueThumbnails() {
   state.media.forEach(item => {
-    if (!item.thumbnailUrl && item.type === 'video') {
-      thumbQueue.push(item);
+    if (!item.thumbnailUrl || !item.durationSec) {
+      if (!thumbQueue.some(q => q.id === item.id)) {
+        thumbQueue.push(item);
+      }
     }
   });
-  processThumbQueue();
+  for (let i = 0; i < MAX_CONCURRENT_WORKERS; i++) {
+    processThumbQueue();
+  }
 }
 
 // Folder Scanning Flow (Electron Native + Web Browser Fallback)
@@ -358,7 +463,12 @@ document.getElementById('browserFolderInput')?.addEventListener('change', (e) =>
   files.forEach(file => {
     const ext = file.name.split('.').pop().toLowerCase();
     if (supportedExts.has(ext)) {
-      const parentDir = file.webkitRelativePath ? file.webkitRelativePath.split('/')[0] : 'Browser Uploads';
+      const parts = file.webkitRelativePath ? file.webkitRelativePath.split('/') : [file.name];
+      let folderName = parts[0] || 'Browser Uploads';
+      if (parts.length > 2) {
+        folderName = parts.slice(1, -1).join(' / ');
+      }
+      const parentDir = parts.length > 1 ? parts.slice(0, -1).join('/') : folderName;
       const isAudio = ['mp3', 'wav', 'm4a', 'flac', 'ogg'].includes(ext);
       const fileId = 'b_' + file.name + '_' + file.size;
 
@@ -372,7 +482,7 @@ document.getElementById('browserFolderInput')?.addEventListener('change', (e) =>
           filePath: file.webkitRelativePath || file.name,
           fileUri: URL.createObjectURL(file),
           folderPath: parentDir,
-          folderName: parentDir,
+          folderName: folderName,
           sizeBytes: file.size,
           mtime: file.lastModified || Date.now(),
           addedAt: Date.now(),
@@ -609,15 +719,26 @@ function renderFeed() {
 
   // Main Feed Grid
   const gridSection = document.createElement('div');
-  const countLabel = state.activeChannel ? `Channel: ${state.activeChannel}` : 'All Media';
+  const countLabel = state.activeChannel ? `📁 Folder: ${state.activeChannel}` : 'All Media';
+  const clearBtn = state.activeChannel ? `<button class="btn btn-accent" id="btnClearActiveChannel" style="font-size:11px; padding:2px 8px; margin-left:10px;">✕ Show All Folders</button>` : '';
   gridSection.innerHTML = `
     <div class="shelf-title">
-      <span>${countLabel}</span>
+      <div style="display:flex; align-items:center;">
+        <span>${countLabel}</span>
+        ${clearBtn}
+      </div>
       <span style="font-size:12px; color:var(--on-surface-muted);">${filteredMedia.length} results</span>
     </div>
     <div class="media-grid" id="mainMediaGrid"></div>
   `;
   const gridEl = gridSection.querySelector('#mainMediaGrid');
+
+  gridSection.querySelector('#btnClearActiveChannel')?.addEventListener('click', () => {
+    state.activeChannel = null;
+    document.querySelectorAll('.sidebar .nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelector('.sidebar .nav-item[data-view="home"]')?.classList.add('active');
+    renderAll();
+  });
 
   if (filteredMedia.length === 0) {
     gridEl.innerHTML = `<div style="grid-column: 1/-1; padding: 40px; text-align: center; color: var(--on-surface-muted);">No files match your filter/search criteria.</div>`;
@@ -911,7 +1032,7 @@ function createVideoCard(item, isShelf) {
   card.innerHTML = `
     <div class="thumbnail-wrap">
       <img class="thumbnail-img card-thumb-${item.id}" src="${thumbSrc}" style="${thumbSrc ? '' : 'display:none;'}" alt="">
-      <div style="${thumbSrc ? 'display:none;' : 'display:flex;'} width:100%; height:100%; align-items:center; justify-content:center; background:#1e2024; color:var(--on-surface-muted); font-size:24px;">
+      <div class="card-placeholder-${item.id}" style="${thumbSrc ? 'display:none;' : 'display:flex;'} width:100%; height:100%; align-items:center; justify-content:center; background:#1e2024; color:var(--on-surface-muted); font-size:24px;">
         ${item.type === 'audio' ? '🎵' : '🎬'}
       </div>
       <span class="duration-pill card-dur-${item.id}">${formatDuration(item.durationSec)}</span>
