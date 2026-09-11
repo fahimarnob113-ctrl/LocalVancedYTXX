@@ -103,7 +103,10 @@ async function processThumbQueue() {
       } catch (e) {
         cached = null;
       }
+    } else {
+      cached = await getThumbFromIDB(item.id);
     }
+
     if (cached) {
       item.thumbnailUrl = cached;
       updateCardThumbnail(item.id, cached);
@@ -112,17 +115,25 @@ async function processThumbQueue() {
       }
     } else {
       const generated = await generateVideoThumbnail(item);
-      if (generated && generated.thumb) {
-        let savedUrl = null;
-        if (window.api && window.api.saveThumbnail) {
-          try {
-            savedUrl = await window.api.saveThumbnail(item.id, generated.thumb);
-          } catch (e) {
-            savedUrl = null;
-          }
+      if (generated) {
+        if (generated.duration) {
+          item.durationSec = generated.duration;
+          updateCardDuration(item.id, generated.duration);
         }
-        item.thumbnailUrl = savedUrl || generated.thumb;
-        updateCardThumbnail(item.id, item.thumbnailUrl);
+        if (generated.thumb) {
+          let savedUrl = null;
+          if (window.api && window.api.saveThumbnail) {
+            try {
+              savedUrl = await window.api.saveThumbnail(item.id, generated.thumb);
+            } catch (e) {
+              savedUrl = null;
+            }
+          } else {
+            await saveThumbToIDB(item.id, generated.thumb);
+          }
+          item.thumbnailUrl = savedUrl || generated.thumb;
+          updateCardThumbnail(item.id, item.thumbnailUrl);
+        }
         saveStateToDisk();
       }
     }
@@ -282,13 +293,16 @@ function updateCardDuration(id, duration) {
   });
 }
 
-// IndexedDB Storage for Browser Mode (Persists File objects across reloads)
+// IndexedDB Storage for Browser Mode (Persists File objects & Thumbnails across reloads)
 const idbPromise = new Promise((resolve) => {
-  const req = indexedDB.open('LocalVancedYT_FilesDB', 1);
+  const req = indexedDB.open('LocalVancedYT_FilesDB', 2);
   req.onupgradeneeded = (e) => {
     const db = e.target.result;
     if (!db.objectStoreNames.contains('files')) {
       db.createObjectStore('files');
+    }
+    if (!db.objectStoreNames.contains('thumbnails')) {
+      db.createObjectStore('thumbnails');
     }
   };
   req.onsuccess = (e) => resolve(e.target.result);
@@ -313,6 +327,32 @@ async function getFileFromIDB(id) {
     return new Promise((resolve) => {
       const tx = db.transaction('files', 'readonly');
       const req = tx.objectStore('files').get(id);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  } catch (e) {
+    return null;
+  }
+}
+
+async function saveThumbToIDB(id, thumbDataUrl) {
+  try {
+    const db = await idbPromise;
+    if (!db) return;
+    const tx = db.transaction('thumbnails', 'readwrite');
+    tx.objectStore('thumbnails').put(thumbDataUrl, id);
+  } catch (e) {
+    console.warn('IDB saveThumb error:', e);
+  }
+}
+
+async function getThumbFromIDB(id) {
+  try {
+    const db = await idbPromise;
+    if (!db) return null;
+    return new Promise((resolve) => {
+      const tx = db.transaction('thumbnails', 'readonly');
+      const req = tx.objectStore('thumbnails').get(id);
       req.onsuccess = () => resolve(req.result || null);
       req.onerror = () => resolve(null);
     });
@@ -350,13 +390,20 @@ async function loadStateFromDisk() {
         });
       }
 
-      // Re-hydrate browser blob URLs from IndexedDB
+      // Re-hydrate browser blob URLs & thumbnails from IndexedDB
       if (!window.api && state.media.length > 0) {
         for (const m of state.media) {
           const file = await getFileFromIDB(m.id);
           if (file) {
             state.browserFiles.set(m.id, file);
             m.fileUri = URL.createObjectURL(file);
+          }
+          if (!m.thumbnailUrl) {
+            const cachedThumb = await getThumbFromIDB(m.id);
+            if (cachedThumb) {
+              m.thumbnailUrl = cachedThumb;
+              updateCardThumbnail(m.id, cachedThumb);
+            }
           }
         }
       }
@@ -369,8 +416,18 @@ async function loadStateFromDisk() {
 }
 
 async function saveStateToDisk() {
+  // In browser mode, strip large base64 data URLs from state.media before saving to localStorage
+  // because localStorage is capped at 5MB across the entire domain in Chrome!
+  const mediaToSave = state.media.map(m => {
+    if (!window.api && m.thumbnailUrl && m.thumbnailUrl.startsWith('data:')) {
+      const { thumbnailUrl, ...rest } = m;
+      return rest;
+    }
+    return m;
+  });
+
   const payload = {
-    media: state.media,
+    media: mediaToSave,
     folders: state.folders,
     history: state.history,
     favorites: Array.from(state.favorites),
@@ -469,6 +526,7 @@ document.getElementById('browserFolderInput')?.addEventListener('change', (e) =>
 
   const supportedExts = new Set(['mp4', 'mkv', 'webm', 'mov', 'avi', 'mp3', 'wav', 'm4a', 'flac', 'ogg']);
   let addedCount = 0;
+  let reconnectedCount = 0;
 
   files.forEach(file => {
     const ext = file.name.split('.').pop().toLowerCase();
@@ -482,9 +540,18 @@ document.getElementById('browserFolderInput')?.addEventListener('change', (e) =>
       const isAudio = ['mp3', 'wav', 'm4a', 'flac', 'ogg'].includes(ext);
       const fileId = 'b_' + file.name + '_' + file.size;
 
-      if (!state.media.some(m => m.id === fileId)) {
-        state.browserFiles.set(fileId, file);
-        saveFileToIDB(fileId, file);
+      state.browserFiles.set(fileId, file);
+      saveFileToIDB(fileId, file);
+
+      const existing = state.media.find(m => m.id === fileId || m.fileName === file.name);
+      if (existing) {
+        existing.id = fileId;
+        existing.fileUri = URL.createObjectURL(file);
+        existing.filePath = file.webkitRelativePath || file.name;
+        existing.folderName = folderName;
+        existing.folderPath = parentDir;
+        reconnectedCount++;
+      } else {
         state.media.push({
           id: fileId,
           title: file.name.replace(/\.[^/.]+$/, ''),
@@ -500,16 +567,17 @@ document.getElementById('browserFolderInput')?.addEventListener('change', (e) =>
           type: isAudio ? 'audio' : 'video'
         });
         addedCount++;
-      } else {
-        // Update live file handle in memory if already exists
-        state.browserFiles.set(fileId, file);
-        saveFileToIDB(fileId, file);
       }
     }
   });
 
-  logMessage('SUCCESS', `Indexed ${addedCount} media files from browser.`);
-  showToast(`Indexed ${addedCount} media files!`, 'success');
+  if (reconnectedCount > 0) {
+    logMessage('SUCCESS', `Reconnected ${reconnectedCount} media files from browser.`);
+    showToast(`Reconnected ${reconnectedCount} media files!`, 'success');
+  } else {
+    logMessage('SUCCESS', `Indexed ${addedCount} media files from browser.`);
+    showToast(`Indexed ${addedCount} media files!`, 'success');
+  }
   saveStateToDisk();
   renderAll();
   queueThumbnails();
@@ -702,6 +770,28 @@ function renderFeed() {
   }
 
   const filteredMedia = getFilteredAndSortedMedia();
+
+  // Browser Mode Reconnect Banner (Chrome file revocation workaround)
+  if (!window.api && state.media.length > 0 && state.browserFiles.size === 0) {
+    const reconnectBanner = document.createElement('div');
+    reconnectBanner.style.cssText = 'background:rgba(255, 170, 0, 0.12); border:1px solid #ffaa00; border-radius:10px; padding:14px 18px; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;';
+    reconnectBanner.innerHTML = `
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span style="font-size:24px;">🔄</span>
+        <div>
+          <div style="font-weight:700; font-size:14px; color:var(--on-surface);">Browser Session Notice (Chrome Sandbox)</div>
+          <div style="font-size:12.5px; color:var(--on-surface-muted); margin-top:2px;">
+            Chrome revokes temporary file handles upon page reload. Click <strong>Reconnect Folder</strong> to restore instant playback for your ${state.media.length} videos without losing playlists, notes, or history!
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-accent" id="btnBannerReconnect" style="font-size:13px; padding:6px 14px;">🔄 Reconnect Folder</button>
+    `;
+    container.appendChild(reconnectBanner);
+    reconnectBanner.querySelector('#btnBannerReconnect').onclick = () => {
+      document.getElementById('browserFolderInput')?.click();
+    };
+  }
 
   // Continue Watching Shelf (only on home tab)
   if (state.activeNav === 'home' && !state.searchQuery && !state.activeChannel) {

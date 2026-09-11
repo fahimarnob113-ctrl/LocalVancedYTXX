@@ -4,7 +4,8 @@
   "description": "Offline YouTube-Style Media Player with Advanced Filtering & Large Library Support",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "serve": "node server.js"
   },
   "keywords": [
     "youtube",
