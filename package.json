@@ -6,7 +6,8 @@
   "scripts": {
     "start": "electron .",
     "serve": "node server.js",
-    "build": "node build-dist.js"
+    "build": "node build-dist.js",
+    "release": "node publish-release.js"
   },
   "keywords": [
     "youtube",
