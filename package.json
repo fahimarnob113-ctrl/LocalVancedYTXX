@@ -5,7 +5,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "serve": "node server.js"
+    "serve": "node server.js",
+    "build": "node build-dist.js"
   },
   "keywords": [
     "youtube",
@@ -17,6 +18,7 @@
   "author": "Gulam Mustafa",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^33.4.11"
+    "electron": "^33.4.11",
+    "electron-packager": "^17.1.2"
   }
 }
