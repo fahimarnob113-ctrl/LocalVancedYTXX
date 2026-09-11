@@ -1607,6 +1607,7 @@ async function openWatchPage(item) {
   miniPlayer.classList.remove('active');
   document.body.classList.remove('dock-active');
   watchOverlay.classList.add('active');
+  watchOverlay.scrollTop = 0;
 
   document.getElementById('watchTitle').textContent = item.title;
   document.getElementById('watchMeta').textContent = `${item.folderName} • ${formatBytes(item.sizeBytes)} • ${item.ext.toUpperCase()}`;
@@ -1844,6 +1845,13 @@ function renderFolderQueue(currentItem) {
 
     container.appendChild(row);
   });
+
+  const activeRow = container.querySelector('.queue-item-row.active');
+  if (activeRow) {
+    setTimeout(() => {
+      activeRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }, 40);
+  }
 }
 
 // Tab 2: Playlist Queue
@@ -1917,6 +1925,13 @@ function renderPlaylistQueue(currentItem) {
 
     container.appendChild(row);
   });
+
+  const activeRow = container.querySelector('.queue-item-row.active');
+  if (activeRow) {
+    setTimeout(() => {
+      activeRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }, 40);
+  }
 }
 
 // Tab 3: Manual Queue
@@ -2124,6 +2139,10 @@ document.getElementById('btnLogo').onclick = () => {
 };
 
 document.getElementById('btnCloseWatch').onclick = () => closeWatchPage(true);
+
+document.querySelector('.watch-side-queue')?.addEventListener('wheel', (e) => {
+  e.stopPropagation();
+}, { passive: true });
 
 document.getElementById('btnExportBackup')?.addEventListener('click', exportBackup);
 
