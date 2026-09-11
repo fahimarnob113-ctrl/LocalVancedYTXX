@@ -447,13 +447,8 @@ async function saveStateToDisk() {
 }
 
 function queueThumbnails() {
-  state.media.forEach(item => {
-    if (!item.thumbnailUrl || !item.durationSec) {
-      if (!thumbQueue.some(q => q.id === item.id)) {
-        thumbQueue.push(item);
-      }
-    }
-  });
+  // Rather than flooding the decoder with 1,000 items all at once,
+  // lazyThumbObserver queues on-screen visible cards as the user views them!
   for (let i = 0; i < MAX_CONCURRENT_WORKERS; i++) {
     processThumbQueue();
   }
@@ -843,9 +838,41 @@ function renderFeed() {
   if (filteredMedia.length === 0) {
     gridEl.innerHTML = `<div style="grid-column: 1/-1; padding: 40px; text-align: center; color: var(--on-surface-muted);">No files match your filter/search criteria.</div>`;
   } else {
-    filteredMedia.forEach(item => {
-      gridEl.appendChild(createVideoCard(item, false));
-    });
+    const PAGE_SIZE = 36;
+    let renderedCount = 0;
+
+    if (window.feedSentinelObserver) {
+      window.feedSentinelObserver.disconnect();
+    }
+
+    const renderNextBatch = () => {
+      const nextBatch = filteredMedia.slice(renderedCount, renderedCount + PAGE_SIZE);
+      nextBatch.forEach(item => {
+        gridEl.appendChild(createVideoCard(item, false));
+      });
+      renderedCount += nextBatch.length;
+
+      const oldSentinel = document.getElementById('gridSentinel');
+      if (oldSentinel) oldSentinel.remove();
+
+      if (renderedCount < filteredMedia.length) {
+        const sentinel = document.createElement('div');
+        sentinel.id = 'gridSentinel';
+        sentinel.style.cssText = 'grid-column: 1/-1; padding: 20px; text-align: center; color: var(--on-surface-muted); font-size: 13px;';
+        sentinel.innerHTML = `<span>Loading more videos (${renderedCount} of ${filteredMedia.length})...</span>`;
+        gridEl.appendChild(sentinel);
+        window.feedSentinelObserver.observe(sentinel);
+      }
+    };
+
+    window.feedSentinelObserver = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        window.feedSentinelObserver.unobserve(entries[0].target);
+        renderNextBatch();
+      }
+    }, { rootMargin: '400px' });
+
+    renderNextBatch();
   }
 
   container.appendChild(gridSection);
@@ -1115,9 +1142,31 @@ function importRestore(file) {
   reader.readAsText(file);
 }
 
+// Viewport-Only Lazy Thumbnail Observer (Prioritizes on-screen cards)
+const lazyThumbObserver = new IntersectionObserver((entries, observer) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const card = entry.target;
+      const mediaId = card.dataset.id;
+      observer.unobserve(card);
+
+      const item = state.media.find(m => m.id === mediaId);
+      if (item && (!item.thumbnailUrl || !item.durationSec)) {
+        if (!thumbQueue.some(q => q.id === item.id)) {
+          thumbQueue.unshift(item);
+          processThumbQueue();
+        }
+      }
+    }
+  });
+}, {
+  rootMargin: '250px 0px'
+});
+
 function createVideoCard(item, isShelf) {
   const card = document.createElement('div');
   card.className = 'video-card';
+  card.dataset.id = item.id;
   if (isShelf) card.style.width = '240px';
 
   const hist = state.history[item.id];
@@ -1150,6 +1199,11 @@ function createVideoCard(item, isShelf) {
   `;
 
   card.onclick = () => openWatchPage(item);
+
+  if (!item.thumbnailUrl || !item.durationSec) {
+    lazyThumbObserver.observe(card);
+  }
+
   return card;
 }
 
